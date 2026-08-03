@@ -1,0 +1,15 @@
+.env
+__pycache__/
+*.pyc
+.venv/
+*.egg-info/
+dist/
+
+.pytest_cache/
+uv.lock
+# Database & Local Data Storage
+*.db
+*.sqlite
+*.sqlite3
+data/chinook.db
+data/customer_memory.db
