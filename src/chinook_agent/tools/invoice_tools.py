@@ -26,7 +26,7 @@ def _resolve_customer(email: Optional[str], phone: Optional[str], customer_id: O
     return customer
 
 
-@tool(name="customer_lookup", description="Look up a customer by email, phone, or customer ID.")
+@tool("customer_lookup", description="Look up a customer by email, phone, or customer ID.")
 def customer_lookup(
     input: CustomerLookupInput,
     tool_call_id: Annotated[str, "tool_call_id"],
