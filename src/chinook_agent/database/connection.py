@@ -1,6 +1,6 @@
 import sqlite3
 import urllib.request
-from config.settings import settings
+from ..config.settings import settings
 
 
 def _db_is_seeded() -> bool:
@@ -54,4 +54,6 @@ def _ensure_db_exists() -> None:
 
 def get_connection() -> sqlite3.Connection:
     _ensure_db_exists()
-    return sqlite3.connect(settings.DB_FILE_PATH)
+    conn = sqlite3.connect(settings.DB_FILE_PATH)
+    conn.row_factory = sqlite3.Row
+    return conn

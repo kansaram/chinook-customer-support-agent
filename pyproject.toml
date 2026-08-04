@@ -1,28 +1,15 @@
-# ==============================================================================
-# 1. BUILD SYSTEM CONFIGURATION
-# Defines which build backend to use when building/installing the package.
-# ==============================================================================
-[build-system]
-requires = ["setuptools>=61.0"]
-build-backend = "setuptools.build_meta"
-
-# ==============================================================================
-# 2. PROJECT METADATA & DEPENDENCIES
-# Replaces setup.py and requirements.txt in modern Python projects.
-# ==============================================================================
 [project]
 name = "chinook-customer-support-agent"
 version = "0.1.0"
 description = "Multi-agent AI customer support system for digital music store using Chinook database."
 readme = "README.md"
-requires-python = "3.12"
+requires-python = ">=3.12"
 authors = [
     { name = "Manish Kansara", email = "kansaramanish912@gmail.com" }
 ]
 license = { text = "MIT" }
 
 # Project Core Dependencies
-
 dependencies = [
     "gradio>=4.0.0",
     "langgraph>=0.1.0",
@@ -32,6 +19,9 @@ dependencies = [
     "python-dotenv>=1.0.0",
     "sqlalchemy>=2.0.0"
 ]
+
+[tool.setuptools.packages.find]
+where = ["src"]
 
 # Optional / Developer Dependencies (installed via `pip install -e .[dev]`)
 [project.optional-dependencies]

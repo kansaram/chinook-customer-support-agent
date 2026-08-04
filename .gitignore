@@ -13,3 +13,4 @@ uv.lock
 *.sqlite3
 data/chinook.db
 data/customer_memory.db
+data/Chinook_Sqlite.sql

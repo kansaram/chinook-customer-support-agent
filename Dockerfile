@@ -41,7 +41,7 @@ RUN mkdir -p /app/data && \
 EXPOSE 7860
 
 # Command to launch your Gradio app via standard Python
-CMD ["python", "app.py"]
+CMD ["python", "src/chinook_agent/app.py"]
 
 # To build the Docker image, run the following command in the terminal:
 #docker build -t chinook-customer-support-agent .
