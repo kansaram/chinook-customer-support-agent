@@ -13,3 +13,65 @@ class Customer:
     city: Optional[str]
     country: Optional[str]
     support_rep_id: Optional[int]
+
+@dataclass
+class Invoice:
+    invoice_id: int
+    customer_id: int
+    invoice_date: str
+    billing_address: Optional[str]
+    billing_city: Optional[str]
+    billing_state: Optional[str]
+    billing_country: Optional[str]
+    billing_postal_code: Optional[str]
+    total: float
+
+@dataclass
+class InvoiceLine:
+    invoice_line_id: int
+    invoice_id: int
+    track_id: int
+    unit_price: float
+    quantity: int
+
+@dataclass
+class Track:
+    track_id: int
+    name: str
+    album_id: Optional[int]
+    media_type_id: int
+    genre_id: Optional[int]
+    composer: Optional[str]
+    milliseconds: int
+    bytes: Optional[int]
+    unit_price: float
+
+@dataclass
+class Employee:
+    employee_id: int
+    last_name: str
+    first_name: str
+    title: Optional[str]
+    reports_to: Optional[int]
+    birth_date: Optional[str]
+    hire_date: Optional[str]
+    address: Optional[str]
+    city: Optional[str]
+    state: Optional[str]
+    country: Optional[str]
+    postal_code: Optional[str]
+    phone: Optional[str]
+    fax: Optional[str]
+    email: Optional[str]
+
+@dataclass
+class Track:
+    track_id: int
+    name: str
+    album_id: Optional[int]
+    media_type_id: int
+    genre_id: Optional[int]
+    composer: Optional[str]
+    milliseconds: int
+    bytes: Optional[int]
+    unit_price: float
