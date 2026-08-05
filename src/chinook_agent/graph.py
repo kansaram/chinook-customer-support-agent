@@ -19,7 +19,7 @@ from chinook_agent.agents.catalog_agent import catalog_llm_node
 from chinook_agent.tools.catalog_tools import search_artists_fuzzy, search_tracks_fuzzy
 
 from chinook_agent.agents.memory_agent import memory_llm_node
-from chinook_agent.tools.preferences_tools import get_preferences, save_preference
+from chinook_agent.tools.preference_tools import get_preferences, save_preference
 
 
 def load_preferences_node(state: AgentState) -> dict:
