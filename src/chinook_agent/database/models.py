@@ -64,14 +64,42 @@ class Employee:
     fax: Optional[str]
     email: Optional[str]
 
+
 @dataclass
-class Track:
-    track_id: int
+class SupportRep:
+    employee_id: int
+    first_name: str
+    last_name: str
+    title: Optional[str]
+    email: Optional[str]
+
+@dataclass
+class Album:
+    album_id: int
+    title: str
+    artist_id: int
+
+@dataclass
+class Artist:
+    artist_id: int
     name: str
-    album_id: Optional[int]
+
+@dataclass
+class Genre:
+    genre_id: int
+    name: Optional[str]
+
+@dataclass
+class MediaType:
     media_type_id: int
-    genre_id: Optional[int]
-    composer: Optional[str]
-    milliseconds: int
-    bytes: Optional[int]
-    unit_price: float
+    name: Optional[str]
+
+@dataclass
+class Playlist: 
+    playlist_id: int
+    name: str
+
+@dataclass
+class PlaylistTrack:
+    playlist_id: int
+    track_id: int

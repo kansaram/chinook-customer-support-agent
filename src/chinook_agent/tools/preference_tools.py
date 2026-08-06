@@ -32,7 +32,6 @@ def save_preference(
     tool_call_id: Annotated[str, "tool_call_id"],
     state: Annotated[dict, InjectedState],
 ) -> Command:
-    """Append a stated preference to state AND persist the full list to customer_memory.db."""
     preference_text = input.get("preference")
     if not preference_text:
         message = "No preference text provided."
@@ -43,18 +42,24 @@ def save_preference(
         email=state.get("customer_email"),
         phone=state.get("customer_phone"),
     )
+
     if identifier is None:
-        message = "I need your email, phone, or customer ID before I can save preferences."
-        return Command(update={"messages": [ToolMessage(content=message, tool_call_id=tool_call_id)]})
+        # Queue it instead of dropping it — will be flushed once an identifier is known
+        message = "I'll remember that once I have your email, phone, or customer ID — I've noted it for now."
+        return Command(
+            update={
+                "pending_preferences": [preference_text],
+                "messages": [ToolMessage(content=message, tool_call_id=tool_call_id)],
+            }
+        )
 
     existing = state.get("preferences", [])
     updated_list = existing + [preference_text] if preference_text not in existing else existing
-
     save_preferences_list(identifier, updated_list)
 
     return Command(
         update={
-            "preferences": [preference_text],  # the add_preferences reducer appends this
+            "preferences": [preference_text],
             "messages": [ToolMessage(content=f"Noted: {preference_text}", tool_call_id=tool_call_id)],
         }
     )
