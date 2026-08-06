@@ -1,5 +1,11 @@
 import pytest
+from uuid import uuid4
 from chinook_agent.tools.invoice_tools import customer_lookup
+from chinook_agent.tools.catalog_tools import browse_songs_by_genre_tool
+from chinook_agent.tools.catalog_tools import search_song_by_title_fuzzy_tool
+from chinook_agent.tools.catalog_tools import get_track_details_by_id_tool
+from chinook_agent.tools.catalog_tools import suggest_catalog_from_preferences_tool
+from chinook_agent.tools.preference_tools import save_preference
 
 _TOOL_CALL_ID = "test-call-id"
 
@@ -7,6 +13,32 @@ _TOOL_CALL_ID = "test-call-id"
 def _invoke(payload: dict) -> str:
     """Invoke the tool and extract the ToolMessage content from the returned Command."""
     cmd = customer_lookup.invoke({"input": payload, "tool_call_id": _TOOL_CALL_ID})
+    return cmd.update["messages"][0].content
+
+
+def _invoke_genre(payload: dict) -> str:
+    """Invoke the genre tool and extract the ToolMessage content from the returned Command."""
+    cmd = browse_songs_by_genre_tool.invoke({"input": payload, "tool_call_id": _TOOL_CALL_ID})
+    return cmd.update["messages"][0].content
+
+
+def _invoke_song_search(payload: dict) -> str:
+    """Invoke the fuzzy song title tool and extract the ToolMessage content from the returned Command."""
+    cmd = search_song_by_title_fuzzy_tool.invoke({"input": payload, "tool_call_id": _TOOL_CALL_ID})
+    return cmd.update["messages"][0].content
+
+
+def _invoke_track_details(payload: dict) -> str:
+    """Invoke the track details tool and extract the ToolMessage content from the returned Command."""
+    cmd = get_track_details_by_id_tool.invoke({"input": payload, "tool_call_id": _TOOL_CALL_ID})
+    return cmd.update["messages"][0].content
+
+
+def _invoke_preference_suggestions(payload: dict, state: dict) -> str:
+    """Invoke preference-based catalog suggestion tool with explicit state."""
+    cmd = suggest_catalog_from_preferences_tool.invoke(
+        {"input": payload, "tool_call_id": _TOOL_CALL_ID, "state": state}
+    )
     return cmd.update["messages"][0].content
 
 
@@ -33,3 +65,77 @@ def test_customer_lookup_case_insensitive_email():
 def test_customer_lookup_missing_both():
     result = _invoke({})
     assert "Please provide either an email" in result
+
+
+def test_browse_songs_by_genre_tool_returns_sample():
+    result = _invoke_genre({"genre_name": "Rock", "sample_size": 6, "per_artist_cap": 1})
+    assert "Songs in genre Rock" in result
+    assert "across" in result
+    assert "artists" in result
+
+
+def test_browse_songs_by_genre_tool_unknown_genre():
+    result = _invoke_genre({"genre_name": "no-such-genre-xyz"})
+    assert "No genre found" in result
+
+
+def test_search_song_by_title_fuzzy_tool_returns_results():
+    result = _invoke_song_search({"song_title": "Balls to the Wall", "limit": 5})
+    assert "Song matches for 'Balls to the Wall'" in result
+    assert "by" in result
+    assert "score:" in result
+
+
+def test_search_song_by_title_fuzzy_tool_handles_unknown_song():
+    result = _invoke_song_search({"song_title": "no-such-song-xyz", "threshold": 90})
+    assert "No songs found matching" in result
+
+
+def test_get_track_details_by_id_tool_returns_details():
+    result = _invoke_track_details({"track_id": 1})
+    assert "Track ID: 1" in result
+    assert "Name:" in result
+    assert "Artist:" in result
+    assert "Unit Price:" in result
+
+
+def test_get_track_details_by_id_tool_handles_unknown_track():
+    result = _invoke_track_details({"track_id": 999999})
+    assert "No track found with ID" in result
+
+
+def test_suggest_catalog_from_preferences_tool_uses_state_preferences():
+    state = {
+        "customer_id": None,
+        "customer_email": None,
+        "customer_phone": None,
+        "preferences": ["I prefer Rock"],
+        "pending_preferences": [],
+    }
+
+    result = _invoke_preference_suggestions({"sample_size": 3, "per_artist_cap": 1}, state)
+    assert "Preference-based suggestions:" in result
+    assert "Based on preference" in result
+
+
+def test_suggest_catalog_from_preferences_tool_loads_saved_preferences_from_memory_repo():
+    email = f"pref-test-{uuid4().hex[:8]}@example.com"
+    state = {
+        "customer_id": None,
+        "customer_email": email,
+        "customer_phone": None,
+        "preferences": [],
+        "pending_preferences": [],
+    }
+
+    save_preference.invoke(
+        {
+            "input": {"preference": "I like Jazz"},
+            "tool_call_id": _TOOL_CALL_ID,
+            "state": state,
+        }
+    )
+
+    result = _invoke_preference_suggestions({"sample_size": 2, "per_artist_cap": 1}, state)
+    assert "Preference-based suggestions:" in result
+    assert "Based on preference" in result

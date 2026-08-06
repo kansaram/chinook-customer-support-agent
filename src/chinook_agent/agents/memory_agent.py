@@ -16,6 +16,14 @@ llm = ChatOpenAI(model=settings.DEFAULT_MODEL, temperature=0).bind_tools(MEMORY_
 
 EMAIL_RE = re.compile(r"[\w.+-]+@[\w-]+\.[\w.-]+")
 PHONE_RE = re.compile(r"(\+?\d[\d\s().-]{7,}\d)")
+PREFERENCE_PATTERNS = [
+    re.compile(r"\bi\s+(?:really\s+)?(?:like|love|prefer)\s+(.+)$", re.IGNORECASE),
+    re.compile(r"\b(.+?)\s+is\s+my\s+favorite\b", re.IGNORECASE),
+    re.compile(r"\bi\s+am\s+interested\s+in\s+(.+)$", re.IGNORECASE),
+    re.compile(r"\bi'?m\s+interested\s+in\s+(.+)$", re.IGNORECASE),
+    re.compile(r"\bi\s+am\s+interested\s+(.+)$", re.IGNORECASE),
+    re.compile(r"\bi'?m\s+interested\s+(.+)$", re.IGNORECASE),
+]
 
 
 def _extract_identifier_from_messages(messages: list) -> dict:
@@ -33,6 +41,66 @@ def _extract_identifier_from_messages(messages: list) -> dict:
                 "phone": phone_match.group(0) if phone_match else None,
             }
     return {"email": None, "phone": None}
+
+
+def _get_message_role(message) -> str:
+    if isinstance(message, dict):
+        return str(message.get("role") or "")
+
+    msg_type = getattr(message, "type", None)
+    if msg_type == "human":
+        return "user"
+    if msg_type == "ai":
+        return "assistant"
+
+    role = getattr(message, "role", None)
+    return str(role or "")
+
+
+def _get_message_content(message) -> str:
+    if isinstance(message, dict):
+        return str(message.get("content") or "")
+    return str(getattr(message, "content", "") or "")
+
+
+def _extract_explicit_music_preferences(messages: list) -> list[str]:
+    """Extract explicit preference statements from user messages only."""
+    extracted: list[str] = []
+    seen_lower: set[str] = set()
+
+    for msg in messages:
+        if _get_message_role(msg).lower() not in {"user", "human"}:
+            continue
+
+        content = _get_message_content(msg).strip()
+        if not content:
+            continue
+
+        for chunk in re.split(r"[\n.!?]+", content):
+            sentence = chunk.strip(" \t\r\n,;:")
+            if not sentence:
+                continue
+
+            for pattern in PREFERENCE_PATTERNS:
+                if pattern.search(sentence):
+                    key = sentence.lower()
+                    if key not in seen_lower:
+                        extracted.append(sentence)
+                        seen_lower.add(key)
+                    break
+
+    return extracted
+
+
+def _append_unique_preferences(existing: list[str], new_items: list[str]) -> list[str]:
+    existing_lower = {item.lower() for item in existing}
+    merged = list(existing)
+    for item in new_items:
+        item_lower = item.lower()
+        if item_lower not in existing_lower:
+            merged.append(item)
+            existing_lower.add(item_lower)
+    return merged
 
 
 def memory_llm_node(state: AgentState) -> dict:
@@ -67,11 +135,34 @@ def memory_llm_node(state: AgentState) -> dict:
     pending = state.get("pending_preferences", [])
     if identifier and pending:
         current = updates.get("preferences", state.get("preferences", []))
-        merged = current + [p for p in pending if p not in current]
+        merged = _append_unique_preferences(current, pending)
         save_preferences_list(identifier, merged)
-        updates["preferences"] = pending  # reducer appends these onto current
+        current_lower = {p.lower() for p in current}
+        updates["preferences"] = [p for p in pending if p.lower() not in current_lower]  # reducer appends these onto current
         updates["pending_preferences"] = []  # NOTE: see caveat below — plain assign won't clear an additive reducer
         logger.info("flushed pending preferences", extra={"identifier": identifier, "count": len(pending)})
+
+    # Deterministic preference capture each turn for explicit user statements.
+    detected = _extract_explicit_music_preferences(state["messages"])
+    if detected:
+        current = updates.get("preferences", state.get("preferences", []))
+        current_lower = {p.lower() for p in current}
+        pending_now = updates.get("pending_preferences", state.get("pending_preferences", []))
+        pending_lower = {p.lower() for p in pending_now}
+        new_preferences = [p for p in detected if p.lower() not in current_lower and p.lower() not in pending_lower]
+
+        if new_preferences:
+            if identifier:
+                merged = _append_unique_preferences(current, new_preferences)
+                save_preferences_list(identifier, merged)
+                updates["preferences"] = [p for p in new_preferences if p.lower() not in current_lower]
+                logger.info(
+                    "captured explicit preferences",
+                    extra={"identifier": identifier, "count": len(new_preferences)},
+                )
+            else:
+                updates["pending_preferences"] = new_preferences
+                logger.info("queued explicit preferences", extra={"count": len(new_preferences)})
 
     messages = [{"role": "system", "content": MEMORY_AGENT_PROMPT}] + state["messages"]
     response = llm.invoke(messages)

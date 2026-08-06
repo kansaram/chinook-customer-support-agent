@@ -17,8 +17,14 @@ from .tools.invoice_tools import (
 )
 
 from .agents.catalog_agent import catalog_llm_node
-from .tools.catalog_tools import search_artists_fuzzy, search_tracks_fuzzy
-
+from .tools.catalog_tools import (
+    get_albums_for_artist_tool,
+    search_tracks_by_artist_tool,
+    browse_songs_by_genre_tool,
+    search_song_by_title_fuzzy_tool,
+    get_track_details_by_id_tool,
+    suggest_catalog_from_preferences_tool,
+)
 from .agents.memory_agent import memory_llm_node
 from .tools.preference_tools import save_preference, get_preferences
 
@@ -56,7 +62,19 @@ def build_graph() -> StateGraph:
 
     # --- Catalog agent ---
     graph.add_node("catalog_agent", catalog_llm_node)
-    graph.add_node("catalog_tools", ToolNode([search_artists_fuzzy, search_tracks_fuzzy]))
+    graph.add_node(
+        "catalog_tools",
+        ToolNode([
+            get_albums_for_artist_tool,
+            search_tracks_by_artist_tool,
+            browse_songs_by_genre_tool,
+            search_song_by_title_fuzzy_tool,
+            get_track_details_by_id_tool,
+            suggest_catalog_from_preferences_tool,
+            get_preferences,
+            save_preference,
+        ]),
+    )
     graph.add_conditional_edges("catalog_agent", tools_condition, {"tools": "catalog_tools", END: END})
     graph.add_edge("catalog_tools", "catalog_agent")
 

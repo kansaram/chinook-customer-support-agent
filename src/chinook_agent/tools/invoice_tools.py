@@ -24,6 +24,13 @@ class CustomerLookupInput(BaseModel):
     phone: Optional[str] = Field(default=None, description="The customer's phone number to look up")
     customer_id: Optional[int] = Field(default=None, description="The customer's ID to look up")
 
+class InvoiceIdInput(BaseModel):
+    invoice_id: int = Field(description="The invoice ID to retrieve details for")
+
+
+class NoInput(BaseModel):
+    """For tools that need nothing beyond what's already in state."""
+    pass
 
 def _resolve_customer(email: Optional[str], phone: Optional[str], customer_id: Optional[int]):
     customer = None
@@ -75,7 +82,7 @@ def customer_lookup(
 
 @tool("get_invoice_history", description="Retrieve a customer's invoice history by customer ID.")
 def get_invoice_history(
-    input: Annotated[dict, "input"],
+    input: NoInput,
     tool_call_id: Annotated[str, "tool_call_id"],
     state: InjectedState,
 ) -> Command:
@@ -100,7 +107,7 @@ def get_invoice_history(
 
 @tool("get_tracks_for_invoices_for_customer", description="Retrieve track details across all of a customer's invoices.")
 def get_tracks_for_invoices_for_customer(
-    input: Annotated[dict, "input"],
+    input: NoInput,
     tool_call_id: Annotated[str, "tool_call_id"],
     state: InjectedState,
 ) -> Command:
@@ -126,7 +133,7 @@ def get_tracks_for_invoices_for_customer(
 
 @tool("get_support_rep_for_customer_by_invoiceId", description="Retrieve the support representative details for a specific customer and invoice ID.")
 def get_support_rep_for_customer_by_invoiceId(
-    input: Annotated[dict, "input"],
+    input: InvoiceIdInput,
     tool_call_id: Annotated[str, "tool_call_id"],
     state: InjectedState,
 ) -> Command:
@@ -136,7 +143,7 @@ def get_support_rep_for_customer_by_invoiceId(
         message = "Customer ID not found in state. Please look up the customer first."
         return Command(update={"messages": [ToolMessage(content=message, tool_call_id=tool_call_id)]})
 
-    invoice_id = input.get("invoice_id")
+    invoice_id = input.invoice_id
     if not invoice_id:
         message = "Invoice ID is required to retrieve the support representative details."
         return Command(update={"messages": [ToolMessage(content=message, tool_call_id=tool_call_id)]})
@@ -158,7 +165,7 @@ def get_support_rep_for_customer_by_invoiceId(
 
 @tool("get_tracks_for_invoice_for_customer", description="Retrieve track details for a specific invoice and customer.")
 def get_tracks_for_invoice_for_customer(
-    input: Annotated[dict, "input"],
+    input: InvoiceIdInput,
     tool_call_id: Annotated[str, "tool_call_id"],
     state: InjectedState,
 ) -> Command:
@@ -168,7 +175,7 @@ def get_tracks_for_invoice_for_customer(
         message = "Customer ID not found in state. Please look up the customer first."
         return Command(update={"messages": [ToolMessage(content=message, tool_call_id=tool_call_id)]})
 
-    invoice_id = input.get("invoice_id")
+    invoice_id = input.invoice_id
     if not invoice_id:
         message = "Invoice ID is required to retrieve the track details."
         return Command(update={"messages": [ToolMessage(content=message, tool_call_id=tool_call_id)]})

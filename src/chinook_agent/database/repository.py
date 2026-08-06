@@ -3,6 +3,7 @@ import re
 from typing import Optional
 from .connection import get_connection
 from .models import Customer
+from rapidfuzz import process, fuzz
 
 def _normalize_phone(phone: Optional[str]) -> str:
     """Strip everything except digits, so +1 (555) 123-4567 and 15551234567 compare equal."""
@@ -177,3 +178,267 @@ def get_tracks_for_invoice_for_customer(invoice_id: int, customer_id: int) -> li
         ]
     finally:
         conn.close()
+
+    
+def find_artist_id_by_name(artist_name: str, threshold: int = 60) -> Optional[dict]:
+    """Fuzzy-match an artist name to the closest Artist record. Returns None if no good match."""
+    conn = get_connection()
+    try:
+        rows = conn.execute("SELECT ArtistId, Name FROM Artist").fetchall()
+    finally:
+        conn.close()
+
+    names = {row["Name"]: row["ArtistId"] for row in rows}
+    if not names:
+        return None
+
+    match = process.extractOne(artist_name, names.keys(), scorer=fuzz.WRatio)
+    if match is None or match[1] < threshold:
+        return None
+
+    matched_name, score, _ = match
+    return {"artist_id": names[matched_name], "matched_name": matched_name, "score": score}
+
+
+def get_albums_for_artist(artist_id: int) -> list[dict]:
+    """Return a list of albums for the given artist ID."""
+    conn = get_connection()
+    try:
+        rows = conn.execute(
+            "SELECT a.Title, t.Name AS ArtistName "
+            "FROM Artist t "
+            "JOIN Album a ON a.ArtistId = t.ArtistId "
+            "WHERE t.ArtistId = ?",
+            (artist_id,),
+        ).fetchall()
+        return [{"artist_name": row["ArtistName"], "title": row["Title"]} for row in rows]
+    finally:
+        conn.close()
+
+def search_tracks_by_artist(artist_id: int, sample_size: int = 10) -> dict:
+    """Return total track count and a sample of tracks for the given artist ID."""
+    conn = get_connection()
+    try:
+        total_row = conn.execute(
+            "SELECT COUNT(*) as total "
+            "FROM Track t "
+            "JOIN Album a ON t.AlbumId = a.AlbumId "
+            "JOIN Artist ar ON a.ArtistId = ar.ArtistId "
+            "WHERE ar.ArtistId = ?",
+            (artist_id,),
+        ).fetchone()
+        total = total_row["total"]
+
+        sample_rows = conn.execute(
+            "SELECT t.Name AS TrackName, a.Title AS AlbumTitle "
+            "FROM Track t "
+            "JOIN Album a ON t.AlbumId = a.AlbumId "
+            "JOIN Artist ar ON a.ArtistId = ar.ArtistId "
+            "WHERE ar.ArtistId = ? "
+            "LIMIT ?",
+            (artist_id, sample_size),
+        ).fetchall()
+
+        sample = [{"track_name": row["TrackName"], "album_title": row["AlbumTitle"]} for row in sample_rows]
+
+        return {"total": total, "sample": sample}
+    finally:
+        conn.close()
+
+
+def find_genre_id_by_name(genre_name: str, threshold: int = 60) -> Optional[dict]:
+    """Fuzzy-match a genre name to the closest Genre record. Returns None if no good match."""
+    conn = get_connection()
+    try:
+        rows = conn.execute("SELECT GenreId, Name FROM Genre WHERE Name IS NOT NULL").fetchall()
+    finally:
+        conn.close()
+
+    names = {row["Name"]: row["GenreId"] for row in rows}
+    if not names:
+        return None
+
+    match = process.extractOne(genre_name, names.keys(), scorer=fuzz.WRatio)
+    if match is None or match[1] < threshold:
+        return None
+
+    matched_name, score, _ = match
+    return {"genre_id": names[matched_name], "matched_name": matched_name, "score": score}
+
+
+def browse_songs_by_genre(genre_name: str, sample_size: int = 12, per_artist_cap: int = 2) -> Optional[dict]:
+    """Return genre totals and a representative sample spread across different artists."""
+    if sample_size <= 0:
+        return None
+
+    if per_artist_cap <= 0:
+        per_artist_cap = 1
+
+    match = find_genre_id_by_name(genre_name)
+    if match is None:
+        return None
+
+    conn = get_connection()
+    try:
+        totals_row = conn.execute(
+            "SELECT COUNT(*) AS total_tracks, COUNT(DISTINCT ar.ArtistId) AS total_artists "
+            "FROM Track t "
+            "JOIN Album a ON t.AlbumId = a.AlbumId "
+            "JOIN Artist ar ON a.ArtistId = ar.ArtistId "
+            "WHERE t.GenreId = ?",
+            (match["genre_id"],),
+        ).fetchone()
+
+        total_tracks = totals_row["total_tracks"]
+        total_artists = totals_row["total_artists"]
+
+        if total_tracks == 0:
+            return {
+                "genre_name": match["matched_name"],
+                "total_tracks": 0,
+                "total_artists": 0,
+                "sample": [],
+            }
+
+        sample_rows = conn.execute(
+            "WITH ranked AS ("
+            "    SELECT "
+            "        t.Name AS track_name, "
+            "        a.Title AS album_title, "
+            "        ar.Name AS artist_name, "
+            "        ROW_NUMBER() OVER (PARTITION BY ar.ArtistId ORDER BY t.Name) AS artist_rank "
+            "    FROM Track t "
+            "    JOIN Album a ON t.AlbumId = a.AlbumId "
+            "    JOIN Artist ar ON a.ArtistId = ar.ArtistId "
+            "    WHERE t.GenreId = ?"
+            "), interleaved AS ("
+            "    SELECT "
+            "        track_name, album_title, artist_name, artist_rank, "
+            "        ROW_NUMBER() OVER (ORDER BY artist_rank, artist_name, track_name) AS global_rank "
+            "    FROM ranked "
+            "    WHERE artist_rank <= ?"
+            ") "
+            "SELECT track_name, album_title, artist_name "
+            "FROM interleaved "
+            "WHERE global_rank <= ? "
+            "ORDER BY global_rank",
+            (match["genre_id"], per_artist_cap, sample_size),
+        ).fetchall()
+
+        sample = [
+            {
+                "track_name": row["track_name"],
+                "album_title": row["album_title"],
+                "artist_name": row["artist_name"],
+            }
+            for row in sample_rows
+        ]
+
+        return {
+            "genre_name": match["matched_name"],
+            "total_tracks": total_tracks,
+            "total_artists": total_artists,
+            "sample": sample,
+        }
+    finally:
+        conn.close()
+
+
+def search_song_by_title_fuzzy(song_title: str, limit: int = 10, threshold: int = 60) -> list[dict]:
+    """Fuzzy-search tracks by title and return detailed matches with artist and album."""
+    if not song_title.strip() or limit <= 0:
+        return []
+
+    conn = get_connection()
+    try:
+        rows = conn.execute(
+            "SELECT t.TrackId, t.Name AS TrackName, a.Title AS AlbumTitle, ar.Name AS ArtistName "
+            "FROM Track t "
+            "JOIN Album a ON t.AlbumId = a.AlbumId "
+            "JOIN Artist ar ON a.ArtistId = ar.ArtistId"
+        ).fetchall()
+    finally:
+        conn.close()
+
+    if not rows:
+        return []
+
+    name_to_rows: dict[str, list[sqlite3.Row]] = {}
+    for row in rows:
+        name_to_rows.setdefault(row["TrackName"], []).append(row)
+
+    matches = process.extract(
+        song_title,
+        name_to_rows.keys(),
+        scorer=fuzz.WRatio,
+        limit=limit,
+        score_cutoff=threshold,
+    )
+
+    results: list[dict] = []
+    for matched_name, score, _ in matches:
+        for row in name_to_rows[matched_name]:
+            results.append(
+                {
+                    "track_id": row["TrackId"],
+                    "track_name": row["TrackName"],
+                    "album_title": row["AlbumTitle"],
+                    "artist_name": row["ArtistName"],
+                    "score": score,
+                }
+            )
+
+    results.sort(key=lambda item: item["score"], reverse=True)
+    return results[:limit]
+
+
+def get_track_details_by_id(track_id: int) -> Optional[dict]:
+    """Return complete details for a specific track by its ID."""
+    conn = get_connection()
+    try:
+        row = conn.execute(
+            "SELECT "
+            "    t.TrackId, "
+            "    t.Name AS TrackName, "
+            "    a.AlbumId, "
+            "    a.Title AS AlbumTitle, "
+            "    ar.ArtistId, "
+            "    ar.Name AS ArtistName, "
+            "    g.GenreId, "
+            "    g.Name AS GenreName, "
+            "    mt.MediaTypeId, "
+            "    mt.Name AS MediaTypeName, "
+            "    t.Composer, "
+            "    t.Milliseconds, "
+            "    t.Bytes, "
+            "    t.UnitPrice "
+            "FROM Track t "
+            "LEFT JOIN Album a ON t.AlbumId = a.AlbumId "
+            "LEFT JOIN Artist ar ON a.ArtistId = ar.ArtistId "
+            "LEFT JOIN Genre g ON t.GenreId = g.GenreId "
+            "LEFT JOIN MediaType mt ON t.MediaTypeId = mt.MediaTypeId "
+            "WHERE t.TrackId = ?",
+            (track_id,),
+        ).fetchone()
+    finally:
+        conn.close()
+
+    if row is None:
+        return None
+
+    return {
+        "track_id": row["TrackId"],
+        "track_name": row["TrackName"],
+        "album_id": row["AlbumId"],
+        "album_title": row["AlbumTitle"],
+        "artist_id": row["ArtistId"],
+        "artist_name": row["ArtistName"],
+        "genre_id": row["GenreId"],
+        "genre_name": row["GenreName"],
+        "media_type_id": row["MediaTypeId"],
+        "media_type_name": row["MediaTypeName"],
+        "composer": row["Composer"],
+        "milliseconds": row["Milliseconds"],
+        "bytes": row["Bytes"],
+        "unit_price": row["UnitPrice"],
+    }
