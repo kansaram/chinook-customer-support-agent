@@ -8,6 +8,7 @@ from ..tools.catalog_tools import (
 	browse_songs_by_genre_tool,
 	get_albums_for_artist_tool,
 	get_track_details_by_id_tool,
+	search_tracks_by_composer_tool,
 	search_song_by_title_fuzzy_tool,
 	suggest_catalog_from_preferences_tool,
 	search_tracks_by_artist_tool,
@@ -22,6 +23,7 @@ CATALOG_TOOLS = [
 	search_tracks_by_artist_tool,
 	browse_songs_by_genre_tool,
 	search_song_by_title_fuzzy_tool,
+	search_tracks_by_composer_tool,
 	get_track_details_by_id_tool,
 	suggest_catalog_from_preferences_tool,
 	get_preferences,
@@ -46,4 +48,11 @@ def catalog_llm_node(state: AgentState) -> dict:
 	logger.info("catalog_agent invoked", extra={"preference_count": len(preferences)})
 
 	response = llm.invoke(messages)
-	return {"messages": [response]}
+	updates = {"messages": [response]}
+
+	# Mark the primary agent's final text response so UI doesn't accidentally pick
+	# a background memory message from merged state ordering.
+	if state.get("next_agent") == "catalog_agent" and not response.tool_calls:
+		updates["response"] = response.content
+
+	return updates

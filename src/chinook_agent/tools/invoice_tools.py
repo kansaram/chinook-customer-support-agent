@@ -3,7 +3,7 @@ import os
 import sys
 from typing import Optional, Annotated
 from pydantic import BaseModel, Field
-from langchain_core.tools import tool
+from langchain_core.tools import tool, InjectedToolCallId
 from langchain_core.messages import ToolMessage
 from langgraph.types import Command
 from langgraph.prebuilt import InjectedState
@@ -46,7 +46,7 @@ def _resolve_customer(email: Optional[str], phone: Optional[str], customer_id: O
 @tool("customer_lookup", description="Look up a customer by email, phone, or customer ID.")
 def customer_lookup(
     input: CustomerLookupInput,
-    tool_call_id: Annotated[str, "tool_call_id"],
+    tool_call_id: Annotated[str, InjectedToolCallId],
 ) -> Command:
     """Look up a customer and persist their customer_id into graph state for later tool calls."""
     if not input.email and not input.phone and not input.customer_id:
@@ -83,8 +83,8 @@ def customer_lookup(
 @tool("get_invoice_history", description="Retrieve a customer's invoice history by customer ID.")
 def get_invoice_history(
     input: NoInput,
-    tool_call_id: Annotated[str, "tool_call_id"],
-    state: InjectedState,
+    tool_call_id: Annotated[str, InjectedToolCallId],
+    state: Annotated[dict, InjectedState],
 ) -> Command:
     """Retrieve a customer's invoice history using their customer_id from state."""
     customer_id = state.get("customer_id")
@@ -108,8 +108,8 @@ def get_invoice_history(
 @tool("get_tracks_for_invoices_for_customer", description="Retrieve track details across all of a customer's invoices.")
 def get_tracks_for_invoices_for_customer(
     input: NoInput,
-    tool_call_id: Annotated[str, "tool_call_id"],
-    state: InjectedState,
+    tool_call_id: Annotated[str, InjectedToolCallId],
+    state: Annotated[dict, InjectedState],
 ) -> Command:
     """Retrieve track details for all of a customer's invoices using their customer_id from state."""
     customer_id = state.get("customer_id")
@@ -134,8 +134,8 @@ def get_tracks_for_invoices_for_customer(
 @tool("get_support_rep_for_customer_by_invoiceId", description="Retrieve the support representative details for a specific customer and invoice ID.")
 def get_support_rep_for_customer_by_invoiceId(
     input: InvoiceIdInput,
-    tool_call_id: Annotated[str, "tool_call_id"],
-    state: InjectedState,
+    tool_call_id: Annotated[str, InjectedToolCallId],
+    state: Annotated[dict, InjectedState],
 ) -> Command:
     """Retrieve the support representative details for a specific customer and invoice ID using their customer_id from state."""
     customer_id = state.get("customer_id")
@@ -166,8 +166,8 @@ def get_support_rep_for_customer_by_invoiceId(
 @tool("get_tracks_for_invoice_for_customer", description="Retrieve track details for a specific invoice and customer.")
 def get_tracks_for_invoice_for_customer(
     input: InvoiceIdInput,
-    tool_call_id: Annotated[str, "tool_call_id"],
-    state: InjectedState,
+    tool_call_id: Annotated[str, InjectedToolCallId],
+    state: Annotated[dict, InjectedState],
 ) -> Command:
     """Retrieve track details for a specific invoice and customer using their customer_id from state."""
     customer_id = state.get("customer_id")

@@ -30,10 +30,10 @@ from .tools.preference_tools import save_preference, get_preferences
 
 
 def route_after_supervisor(state: AgentState) -> list[str]:
-    """Fan out to the primary agent AND memory_agent in parallel, unless memory_agent IS primary."""
+    """Run memory in parallel only for catalog turns; invoice turns stay invoice-only."""
     primary = state["next_agent"]
     branches = [primary]
-    if primary != "memory_agent":
+    if primary == "catalog_agent":
         branches.append("memory_agent")
     return branches
 

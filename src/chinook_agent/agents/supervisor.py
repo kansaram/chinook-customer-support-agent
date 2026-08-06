@@ -16,8 +16,69 @@ VALID_AGENTS = ["invoice_agent", "catalog_agent", "memory_agent"]
 router_llm = ChatOpenAI(model=settings.DEFAULT_MODEL, temperature=0)
 
 
+INVOICE_KEYWORDS = {
+    "invoice",
+    "invoices",
+    "billing",
+    "bill",
+    "payment",
+    "payments",
+    "purchase",
+    "purchases",
+    "order",
+    "orders",
+    "receipt",
+    "receipts",
+}
+
+CATALOG_KEYWORDS = {
+    "song",
+    "songs",
+    "track",
+    "tracks",
+    "artist",
+    "artists",
+    "album",
+    "albums",
+    "genre",
+    "genres",
+    "music",
+    "catalog",
+    "recommend",
+    "recommendation",
+    "recommendations",
+}
+
+
+def _latest_user_text(state: AgentState) -> str:
+    for msg in reversed(state["messages"]):
+        role = getattr(msg, "type", None)
+        if role == "human":
+            content = getattr(msg, "content", "") or ""
+            return content if isinstance(content, str) else ""
+        if isinstance(msg, dict) and str(msg.get("role", "")).lower() == "user":
+            content = msg.get("content", "")
+            return content if isinstance(content, str) else ""
+    return ""
+
+
+def _is_mixed_intent(user_text: str) -> bool:
+    lowered = user_text.lower()
+    has_invoice = any(k in lowered for k in INVOICE_KEYWORDS)
+    has_catalog = any(k in lowered for k in CATALOG_KEYWORDS)
+    return has_invoice and has_catalog
+
+
 def supervisor_node(state: AgentState) -> dict:
     """Decide which specialist agent should be primary for this turn."""
+    latest_user_text = _latest_user_text(state)
+
+    # Deterministic rule for mixed intent: prioritize invoice flow first so account
+    # authentication/details are handled before any catalog follow-up.
+    if latest_user_text and _is_mixed_intent(latest_user_text):
+        logger.info("supervisor routed mixed-intent request", extra={"next_agent": "invoice_agent"})
+        return {"next_agent": "invoice_agent"}
+
     messages = [SystemMessage(content=SUPERVISOR_PROMPT)] + state["messages"]
     response = router_llm.invoke(messages)
     raw = response.content.strip().lower()

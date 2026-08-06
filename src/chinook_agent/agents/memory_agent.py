@@ -5,7 +5,12 @@ from langchain_openai import ChatOpenAI
 from ..config.settings import settings
 from ..agents.state import AgentState
 from ..agents.prompts import MEMORY_AGENT_PROMPT
-from ..tools.preference_tools import save_preference, get_preferences, resolve_identifier
+from ..tools.preference_tools import (
+    save_preference,
+    get_preferences,
+    resolve_identifier,
+    apply_preference_update,
+)
 from ..database.memory_repository import load_preferences_list
 from ..config.logging import get_logger
 from ..database.memory_repository import save_preferences_list
@@ -23,6 +28,10 @@ PREFERENCE_PATTERNS = [
     re.compile(r"\bi'?m\s+interested\s+in\s+(.+)$", re.IGNORECASE),
     re.compile(r"\bi\s+am\s+interested\s+(.+)$", re.IGNORECASE),
     re.compile(r"\bi'?m\s+interested\s+(.+)$", re.IGNORECASE),
+    re.compile(r"\bi\s+(?:do\s+not|don't)\s+like\s+(.+)$", re.IGNORECASE),
+    re.compile(r"\bi\s+(?:do\s+not|don't)\s+prefer\s+(.+)$", re.IGNORECASE),
+    re.compile(r"\bi\s+(?:dislike|hate)\s+(.+)$", re.IGNORECASE),
+    re.compile(r"\bi\s+(?:am\s+not|'?m\s+not)\s+interested\s+in\s+(.+)$", re.IGNORECASE),
 ]
 
 
@@ -146,23 +155,37 @@ def memory_llm_node(state: AgentState) -> dict:
     detected = _extract_explicit_music_preferences(state["messages"])
     if detected:
         current = updates.get("preferences", state.get("preferences", []))
-        current_lower = {p.lower() for p in current}
         pending_now = updates.get("pending_preferences", state.get("pending_preferences", []))
-        pending_lower = {p.lower() for p in pending_now}
-        new_preferences = [p for p in detected if p.lower() not in current_lower and p.lower() not in pending_lower]
+        queued_updates: list[str] = []
 
-        if new_preferences:
+        for preference_text in detected:
+            if preference_text.lower() in {p.lower() for p in current}:
+                continue
+            if preference_text.lower() in {p.lower() for p in pending_now}:
+                continue
+
             if identifier:
-                merged = _append_unique_preferences(current, new_preferences)
-                save_preferences_list(identifier, merged)
-                updates["preferences"] = [p for p in new_preferences if p.lower() not in current_lower]
+                current, normalized_preference, _, _ = apply_preference_update(current, preference_text)
+                queued_updates.append(normalized_preference)
+            else:
+                queued_updates.append(preference_text)
+
+        if queued_updates:
+            if identifier:
+                save_preferences_list(identifier, current)
+                updates["preferences"] = queued_updates
                 logger.info(
                     "captured explicit preferences",
-                    extra={"identifier": identifier, "count": len(new_preferences)},
+                    extra={"identifier": identifier, "count": len(queued_updates)},
                 )
             else:
-                updates["pending_preferences"] = new_preferences
-                logger.info("queued explicit preferences", extra={"count": len(new_preferences)})
+                updates["pending_preferences"] = queued_updates
+                logger.info("queued explicit preferences", extra={"count": len(queued_updates)})
+
+    # In background mode, only sync preference state and avoid producing LLM/tool messages.
+    # This prevents cross-agent tool-call ordering issues during parallel fan-out.
+    if not is_primary:
+        return updates
 
     messages = [{"role": "system", "content": MEMORY_AGENT_PROMPT}] + state["messages"]
     response = llm.invoke(messages)

@@ -1,6 +1,8 @@
 from typing import TypedDict, Optional, Annotated
 from langgraph.graph.message import add_messages
 
+from ..tools.preference_tools import parse_preference_statement
+
 
 def _append_unique(existing: list[str], new: list[str] | None) -> list[str]:
     existing_lower = {item.lower() for item in existing}
@@ -14,7 +16,18 @@ def _append_unique(existing: list[str], new: list[str] | None) -> list[str]:
 
 
 def add_preferences(existing: list[str], new: list[str]) -> list[str]:
-    return _append_unique(existing, new)
+    merged = list(existing)
+    for item in new or []:
+        subject, _ = parse_preference_statement(item)
+        subject_lower = subject.casefold()
+        merged = [
+            value
+            for value in merged
+            if parse_preference_statement(value)[0].casefold() != subject_lower
+        ]
+        if item.lower() not in {value.lower() for value in merged}:
+            merged.append(item)
+    return merged
 
 def replace_or_append_preferences(existing: list[str], new: list[str] | None) -> list[str]:
     """If new is explicitly an empty list, treat it as a reset. Otherwise append."""

@@ -392,6 +392,73 @@ def search_song_by_title_fuzzy(song_title: str, limit: int = 10, threshold: int 
     return results[:limit]
 
 
+def search_tracks_by_composer(composer_name: str, sample_size: int = 10, threshold: int = 60) -> dict:
+    """Search tracks by composer text and return a total count plus a representative sample."""
+    if not composer_name.strip() or sample_size <= 0:
+        return {"total": 0, "sample": []}
+
+    conn = get_connection()
+    try:
+        rows = conn.execute(
+            "SELECT t.TrackId, t.Name AS TrackName, a.Title AS AlbumTitle, t.Composer "
+            "FROM Track t "
+            "JOIN Album a ON t.AlbumId = a.AlbumId "
+            "WHERE t.Composer IS NOT NULL"
+        ).fetchall()
+    finally:
+        conn.close()
+
+    if not rows:
+        return {"total": 0, "sample": []}
+
+    composer_lower = composer_name.strip().lower()
+    exact_matches = [
+        row for row in rows
+        if composer_lower in str(row["Composer"]).lower()
+    ]
+
+    if exact_matches:
+        sample = [
+            {
+                "track_id": row["TrackId"],
+                "track_name": row["TrackName"],
+                "album_title": row["AlbumTitle"],
+                "composer": row["Composer"],
+                "score": 100,
+            }
+            for row in exact_matches[:sample_size]
+        ]
+        return {"total": len(exact_matches), "sample": sample}
+
+    composer_to_rows: dict[str, list[sqlite3.Row]] = {}
+    for row in rows:
+        composer_to_rows.setdefault(row["Composer"], []).append(row)
+
+    matches = process.extract(
+        composer_name,
+        composer_to_rows.keys(),
+        scorer=fuzz.WRatio,
+        limit=sample_size,
+        score_cutoff=threshold,
+    )
+
+    sample: list[dict] = []
+    for matched_composer, score, _ in matches:
+        for row in composer_to_rows[matched_composer]:
+            sample.append(
+                {
+                    "track_id": row["TrackId"],
+                    "track_name": row["TrackName"],
+                    "album_title": row["AlbumTitle"],
+                    "composer": row["Composer"],
+                    "score": score,
+                }
+            )
+
+    sample.sort(key=lambda item: item["score"], reverse=True)
+    return {"total": len(sample), "sample": sample[:sample_size]}
+
+
 def get_track_details_by_id(track_id: int) -> Optional[dict]:
     """Return complete details for a specific track by its ID."""
     conn = get_connection()

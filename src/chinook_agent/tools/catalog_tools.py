@@ -1,6 +1,6 @@
 from typing import Annotated
 from pydantic import BaseModel, Field
-from langchain_core.tools import tool
+from langchain_core.tools import tool, InjectedToolCallId
 from langchain_core.messages import ToolMessage
 from langgraph.types import Command
 from langgraph.prebuilt import InjectedState
@@ -10,6 +10,7 @@ from ..database.repository import (
     search_tracks_by_artist,
     browse_songs_by_genre,
     search_song_by_title_fuzzy,
+    search_tracks_by_composer,
     get_track_details_by_id,
 )
 from ..database.memory_repository import load_preferences_list
@@ -23,7 +24,7 @@ class AlbumsByArtistInput(BaseModel):
 @tool("get_albums_for_artist", description="Find albums by an artist name, using fuzzy matching to tolerate typos.")
 def get_albums_for_artist_tool(
     input: AlbumsByArtistInput,
-    tool_call_id: Annotated[str, "tool_call_id"],
+    tool_call_id: Annotated[str, InjectedToolCallId],
 ) -> Command:
     match = find_artist_id_by_name(input.artist_name)
 
@@ -63,6 +64,12 @@ class TrackIdInput(BaseModel):
     track_id: int = Field(description="Track ID to retrieve complete details for")
 
 
+class ComposerSearchInput(BaseModel):
+    composer_name: str = Field(description="Composer name to search for, even if it appears inside a longer composer field")
+    sample_size: int = Field(default=10, ge=1, le=25, description="Maximum number of tracks to return")
+    threshold: int = Field(default=60, ge=0, le=100, description="Minimum fuzzy match score for fallback matching")
+
+
 class PreferenceSuggestionInput(BaseModel):
     sample_size: int = Field(default=6, ge=1, le=20, description="How many songs to sample per suggestion")
     per_artist_cap: int = Field(default=1, ge=1, le=3, description="Max songs per artist for genre-based suggestions")
@@ -95,7 +102,7 @@ def _preference_candidates(preference: str) -> list[str]:
 @tool("search_tracks_by_artist", description="Find tracks/songs by an artist name, with fuzzy matching, total count, and a sample of results.")
 def search_tracks_by_artist_tool(
     input: TracksByArtistInput,
-    tool_call_id: Annotated[str, "tool_call_id"],
+    tool_call_id: Annotated[str, InjectedToolCallId],
 ) -> Command:
     match = find_artist_id_by_name(input.artist_name)
 
@@ -126,7 +133,7 @@ def search_tracks_by_artist_tool(
 )
 def browse_songs_by_genre_tool(
     input: BrowseSongsByGenreInput,
-    tool_call_id: Annotated[str, "tool_call_id"],
+    tool_call_id: Annotated[str, InjectedToolCallId],
 ) -> Command:
     result = browse_songs_by_genre(
         genre_name=input.genre_name,
@@ -162,7 +169,7 @@ def browse_songs_by_genre_tool(
 )
 def search_song_by_title_fuzzy_tool(
     input: SongTitleSearchInput,
-    tool_call_id: Annotated[str, "tool_call_id"],
+    tool_call_id: Annotated[str, InjectedToolCallId],
 ) -> Command:
     matches = search_song_by_title_fuzzy(
         song_title=input.song_title,
@@ -187,12 +194,43 @@ def search_song_by_title_fuzzy_tool(
 
 
 @tool(
+    "search_tracks_by_composer",
+    description="Search tracks by composer text, including composer names embedded in track metadata.",
+)
+def search_tracks_by_composer_tool(
+    input: ComposerSearchInput,
+    tool_call_id: Annotated[str, InjectedToolCallId],
+) -> Command:
+    result = search_tracks_by_composer(
+        composer_name=input.composer_name,
+        sample_size=input.sample_size,
+        threshold=input.threshold,
+    )
+
+    if result["total"] == 0:
+        message = f"No tracks found for composer '{input.composer_name}'."
+        return Command(update={"messages": [ToolMessage(content=message, tool_call_id=tool_call_id)]})
+
+    sample_lines = "\n".join(
+        f"- {row['track_name']} by {row['composer']} (from {row['album_title']}, score: {row['score']:.1f})"
+        for row in result["sample"]
+    )
+    truncation_note = (
+        f"\n\n(Showing {len(result['sample'])} of {result['total']} total tracks matched to this composer.)"
+        if result["total"] > len(result["sample"])
+        else ""
+    )
+    summary = f"Tracks by composer '{input.composer_name}':\n{sample_lines}{truncation_note}"
+    return Command(update={"messages": [ToolMessage(content=summary, tool_call_id=tool_call_id)]})
+
+
+@tool(
     "get_track_details_by_id",
     description="Get complete details for a specific track by its ID.",
 )
 def get_track_details_by_id_tool(
     input: TrackIdInput,
-    tool_call_id: Annotated[str, "tool_call_id"],
+    tool_call_id: Annotated[str, InjectedToolCallId],
 ) -> Command:
     details = get_track_details_by_id(input.track_id)
     if details is None:
@@ -220,7 +258,7 @@ def get_track_details_by_id_tool(
 )
 def suggest_catalog_from_preferences_tool(
     input: PreferenceSuggestionInput,
-    tool_call_id: Annotated[str, "tool_call_id"],
+    tool_call_id: Annotated[str, InjectedToolCallId],
     state: Annotated[dict, InjectedState],
 ) -> Command:
     preferences = list(state.get("preferences", []))

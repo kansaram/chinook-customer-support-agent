@@ -31,4 +31,11 @@ def invoice_llm_node(state: AgentState) -> dict:
     logger.info("invoice_agent invoked", extra={"customer_id": state.get("customer_id")})
 
     response = llm.invoke(messages)
-    return {"messages": [response]}
+    updates = {"messages": [response]}
+
+    # Mark the primary agent's final text response so UI doesn't accidentally pick
+    # a background memory message from merged state ordering.
+    if state.get("next_agent") == "invoice_agent" and not response.tool_calls:
+        updates["response"] = response.content
+
+    return updates
