@@ -1,0 +1,87 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="820" viewBox="0 0 1400 820" role="img" aria-label="Chinook Customer Support Agent architecture diagram">
+  <defs>
+    <style>
+      .bg { fill: #f7f9fc; }
+      .panel { fill: #ffffff; stroke: #d4d9e2; stroke-width: 2; rx: 14; }
+      .node { fill: #ffffff; stroke: #2a4f8f; stroke-width: 2.2; rx: 12; }
+      .tool { fill: #eef5ff; stroke: #2a4f8f; stroke-width: 2; rx: 12; }
+      .end { fill: #e9f8ef; stroke: #2e7d4f; stroke-width: 2.2; }
+      .title { font: 700 34px 'Segoe UI', Tahoma, sans-serif; fill: #1f2a44; }
+      .subtitle { font: 600 19px 'Segoe UI', Tahoma, sans-serif; fill: #344a74; }
+      .label { font: 600 18px 'Segoe UI', Tahoma, sans-serif; fill: #18305f; }
+      .small { font: 500 15px 'Segoe UI', Tahoma, sans-serif; fill: #3c4d72; }
+      .arrow { stroke: #355b9f; stroke-width: 2.8; fill: none; }
+      .arrow-soft { stroke: #5e78ad; stroke-width: 2.4; fill: none; stroke-dasharray: 7 6; }
+    </style>
+    <marker id="arrowhead" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L10,4 L0,8 z" fill="#355b9f" />
+    </marker>
+    <marker id="arrowheadSoft" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L10,4 L0,8 z" fill="#5e78ad" />
+    </marker>
+  </defs>
+
+  <rect class="bg" x="0" y="0" width="1400" height="820" />
+
+  <text class="title" x="700" y="56" text-anchor="middle">Chinook Customer Support Agent Graph</text>
+  <text class="subtitle" x="700" y="88" text-anchor="middle">Supervisor routes each turn to invoice, catalog, or memory flows</text>
+
+  <rect class="panel" x="40" y="120" width="1320" height="650" />
+
+  <rect class="node" x="580" y="165" width="240" height="74" />
+  <text class="label" x="700" y="209" text-anchor="middle">supervisor</text>
+
+  <rect class="node" x="120" y="300" width="250" height="74" />
+  <text class="label" x="245" y="344" text-anchor="middle">invoice_agent</text>
+
+  <rect class="node" x="575" y="300" width="250" height="74" />
+  <text class="label" x="700" y="344" text-anchor="middle">catalog_agent</text>
+
+  <rect class="node" x="1030" y="300" width="250" height="74" />
+  <text class="label" x="1155" y="344" text-anchor="middle">memory_agent</text>
+
+  <rect class="tool" x="120" y="470" width="250" height="74" />
+  <text class="label" x="245" y="514" text-anchor="middle">invoice_tools</text>
+
+  <rect class="tool" x="575" y="470" width="250" height="74" />
+  <text class="label" x="700" y="514" text-anchor="middle">catalog_tools</text>
+
+  <rect class="tool" x="1030" y="470" width="250" height="74" />
+  <text class="label" x="1155" y="514" text-anchor="middle">memory_tools</text>
+
+  <circle class="end" cx="700" cy="670" r="48" />
+  <text class="label" x="700" y="676" text-anchor="middle">END</text>
+
+  <path class="arrow" marker-end="url(#arrowhead)" d="M630 239 C520 270, 390 290, 290 300" />
+  <text class="small" x="470" y="258">invoice_agent</text>
+
+  <path class="arrow" marker-end="url(#arrowhead)" d="M700 239 L700 300" />
+  <text class="small" x="714" y="278">catalog_agent</text>
+
+  <path class="arrow" marker-end="url(#arrowhead)" d="M770 239 C880 270, 1010 290, 1115 300" />
+  <text class="small" x="896" y="258">memory_agent</text>
+
+  <path class="arrow-soft" marker-end="url(#arrowheadSoft)" d="M820 210 C960 230, 1070 260, 1115 300" />
+  <text class="small" x="980" y="222">catalog turn also runs memory</text>
+
+  <path class="arrow" marker-end="url(#arrowhead)" d="M245 374 L245 470" />
+  <text class="small" x="258" y="425">tool call</text>
+  <path class="arrow" marker-end="url(#arrowhead)" d="M270 470 C310 442, 320 405, 286 374" />
+
+  <path class="arrow" marker-end="url(#arrowhead)" d="M700 374 L700 470" />
+  <text class="small" x="713" y="425">tool call</text>
+  <path class="arrow" marker-end="url(#arrowhead)" d="M726 470 C767 442, 776 405, 742 374" />
+
+  <path class="arrow" marker-end="url(#arrowhead)" d="M1155 374 L1155 470" />
+  <text class="small" x="1168" y="425">tool call</text>
+  <path class="arrow" marker-end="url(#arrowhead)" d="M1180 470 C1221 442, 1230 405, 1196 374" />
+
+  <path class="arrow" marker-end="url(#arrowhead)" d="M245 374 C340 565, 535 626, 652 656" />
+  <text class="small" x="360" y="590">no tool call</text>
+
+  <path class="arrow" marker-end="url(#arrowhead)" d="M700 374 L700 622" />
+  <text class="small" x="714" y="593">no tool call</text>
+
+  <path class="arrow" marker-end="url(#arrowhead)" d="M1155 374 C1060 565, 865 626, 748 656" />
+  <text class="small" x="930" y="590">no tool call</text>
+</svg>

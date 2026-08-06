@@ -1,0 +1,85 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="900" viewBox="0 0 1400 900" role="img" aria-label="Chinook request execution flow diagram">
+  <defs>
+    <style>
+      .bg { fill: #fbfcff; }
+      .lane { stroke: #cfd8ea; stroke-width: 2; }
+      .head { fill: #ecf2ff; stroke: #335b9e; stroke-width: 2; rx: 10; }
+      .step { fill: #ffffff; stroke: #335b9e; stroke-width: 2; rx: 10; }
+      .note { fill: #f5f8ff; stroke: #8ca4d4; stroke-width: 1.6; rx: 8; }
+      .title { font: 700 33px 'Segoe UI', Tahoma, sans-serif; fill: #1f2a44; }
+      .label { font: 600 17px 'Segoe UI', Tahoma, sans-serif; fill: #1b3364; }
+      .small { font: 500 14px 'Segoe UI', Tahoma, sans-serif; fill: #44577f; }
+      .arrow { stroke: #355b9f; stroke-width: 2.5; fill: none; }
+      .arrow-dash { stroke: #5d78b0; stroke-width: 2.2; fill: none; stroke-dasharray: 7 6; }
+      .branch { fill: #eaf0fc; stroke: #6783b8; stroke-width: 1.8; rx: 8; }
+    </style>
+    <marker id="arr" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L10,4 L0,8 z" fill="#355b9f" />
+    </marker>
+  </defs>
+
+  <rect class="bg" x="0" y="0" width="1400" height="900"/>
+  <text class="title" x="700" y="54" text-anchor="middle">Request Execution Flow</text>
+
+  <rect class="head" x="70" y="86" width="140" height="46"/><text class="label" x="140" y="115" text-anchor="middle">User</text>
+  <rect class="head" x="250" y="86" width="160" height="46"/><text class="label" x="330" y="115" text-anchor="middle">Supervisor</text>
+  <rect class="head" x="470" y="86" width="170" height="46"/><text class="label" x="555" y="115" text-anchor="middle">Invoice Agent</text>
+  <rect class="head" x="700" y="86" width="170" height="46"/><text class="label" x="785" y="115" text-anchor="middle">Catalog Agent</text>
+  <rect class="head" x="930" y="86" width="170" height="46"/><text class="label" x="1015" y="115" text-anchor="middle">Memory Agent</text>
+  <rect class="head" x="1160" y="86" width="170" height="46"/><text class="label" x="1245" y="115" text-anchor="middle">Tool Node</text>
+
+  <line class="lane" x1="140" y1="140" x2="140" y2="850"/>
+  <line class="lane" x1="330" y1="140" x2="330" y2="850"/>
+  <line class="lane" x1="555" y1="140" x2="555" y2="850"/>
+  <line class="lane" x1="785" y1="140" x2="785" y2="850"/>
+  <line class="lane" x1="1015" y1="140" x2="1015" y2="850"/>
+  <line class="lane" x1="1245" y1="140" x2="1245" y2="850"/>
+
+  <rect class="step" x="80" y="170" width="120" height="44"/>
+  <text class="small" x="140" y="198" text-anchor="middle">Send message</text>
+  <path class="arrow" marker-end="url(#arr)" d="M200 192 L322 192"/>
+
+  <rect class="step" x="255" y="250" width="150" height="44"/>
+  <text class="small" x="330" y="278" text-anchor="middle">Classify intent</text>
+
+  <rect class="branch" x="218" y="330" width="224" height="92"/>
+  <text class="small" x="330" y="360" text-anchor="middle">Branching decision</text>
+  <text class="small" x="330" y="384" text-anchor="middle">invoice | catalog | memory</text>
+
+  <path class="arrow" marker-end="url(#arr)" d="M442 360 L547 360"/>
+  <text class="small" x="492" y="350" text-anchor="middle">invoice</text>
+
+  <path class="arrow" marker-end="url(#arr)" d="M442 384 L777 384"/>
+  <text class="small" x="610" y="374" text-anchor="middle">catalog</text>
+
+  <path class="arrow" marker-end="url(#arr)" d="M442 408 L1007 408"/>
+  <text class="small" x="740" y="398" text-anchor="middle">memory</text>
+
+  <rect class="step" x="490" y="438" width="130" height="44"/>
+  <text class="small" x="555" y="466" text-anchor="middle">Process invoice</text>
+  <path class="arrow" marker-end="url(#arr)" d="M620 460 L1237 460"/>
+  <text class="small" x="930" y="450" text-anchor="middle">optional tool call</text>
+  <path class="arrow" marker-end="url(#arr)" d="M1245 484 L563 484"/>
+
+  <rect class="step" x="720" y="540" width="130" height="44"/>
+  <text class="small" x="785" y="568" text-anchor="middle">Process catalog</text>
+  <path class="arrow" marker-end="url(#arr)" d="M850 562 L1237 562"/>
+  <text class="small" x="1040" y="552" text-anchor="middle">optional tool call</text>
+  <path class="arrow" marker-end="url(#arr)" d="M1245 586 L793 586"/>
+
+  <rect class="step" x="950" y="540" width="130" height="44"/>
+  <text class="small" x="1015" y="568" text-anchor="middle">Memory sync</text>
+  <path class="arrow-dash" marker-end="url(#arr)" d="M850 544 C905 520, 940 515, 950 518"/>
+  <text class="small" x="900" y="505" text-anchor="middle">parallel on catalog turns</text>
+  <path class="arrow" marker-end="url(#arr)" d="M1080 562 L1237 562"/>
+  <path class="arrow" marker-end="url(#arr)" d="M1245 618 L1023 618"/>
+
+  <rect class="note" x="100" y="760" width="1200" height="80"/>
+  <text class="small" x="700" y="792" text-anchor="middle">Invoice turns: supervisor routes to invoice flow only.</text>
+  <text class="small" x="700" y="816" text-anchor="middle">Catalog turns: supervisor routes to catalog flow and runs memory sync in parallel.</text>
+
+  <path class="arrow" marker-end="url(#arr)" d="M555 620 C500 680, 360 720, 148 720"/>
+  <path class="arrow" marker-end="url(#arr)" d="M785 620 C670 700, 420 730, 148 760"/>
+  <path class="arrow" marker-end="url(#arr)" d="M1015 650 C860 760, 520 795, 148 820"/>
+  <text class="small" x="210" y="706">responses return to user</text>
+</svg>

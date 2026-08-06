@@ -1,3 +1,17 @@
+# Chinook Customer Support Agent
+
+## Architecture Graph
+
+<img src="docs/agent-architecture-diagram.svg" alt="Agent Architecture Diagram" width="100%" />
+
+Open directly: [docs/agent-architecture-diagram.svg](docs/agent-architecture-diagram.svg)
+
+## Request Execution Flow
+
+<img src="docs/request-execution-flow.svg" alt="Request Execution Flow Diagram" width="100%" />
+
+Open directly: [docs/request-execution-flow.svg](docs/request-execution-flow.svg)
+
 # 1. Clone repo & enter directory
 git clone https://github.com/kansaram/chinook-customer-support-agent.git
 cd chinook-customer-support-agent
