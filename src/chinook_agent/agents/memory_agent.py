@@ -144,10 +144,13 @@ def memory_llm_node(state: AgentState) -> dict:
     pending = state.get("pending_preferences", [])
     if identifier and pending:
         current = updates.get("preferences", state.get("preferences", []))
-        merged = _append_unique_preferences(current, pending)
-        save_preferences_list(identifier, merged)
-        current_lower = {p.lower() for p in current}
-        updates["preferences"] = [p for p in pending if p.lower() not in current_lower]  # reducer appends these onto current
+        before = list(current)
+        for pending_preference in pending:
+            current, normalized_preference, _, _ = apply_preference_update(current, pending_preference)
+
+        save_preferences_list(identifier, current)
+        before_lower = {p.lower() for p in before}
+        updates["preferences"] = [p for p in current if p.lower() not in before_lower]
         updates["pending_preferences"] = []  # NOTE: see caveat below — plain assign won't clear an additive reducer
         logger.info("flushed pending preferences", extra={"identifier": identifier, "count": len(pending)})
 

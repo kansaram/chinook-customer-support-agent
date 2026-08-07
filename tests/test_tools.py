@@ -6,7 +6,7 @@ from chinook_agent.tools.catalog_tools import search_song_by_title_fuzzy_tool
 from chinook_agent.tools.catalog_tools import search_tracks_by_composer_tool
 from chinook_agent.tools.catalog_tools import get_track_details_by_id_tool
 from chinook_agent.tools.catalog_tools import suggest_catalog_from_preferences_tool
-from chinook_agent.tools.preference_tools import save_preference
+from chinook_agent.tools.preference_tools import save_preference, apply_preference_update
 
 _TOOL_CALL_ID = "test-call-id"
 
@@ -177,3 +177,24 @@ def test_save_preference_without_identifier_queues_preference():
     message = cmd.update["messages"][0].content
     assert "email, phone, or customer ID" in message
     assert cmd.update["pending_preferences"] == ["I like Jazz"]
+
+
+def test_apply_preference_update_removes_existing_subject_entries_on_contradiction():
+    existing = [
+        "You like Pop and catchy music.",
+        "Pop",
+        "You love Jazz.",
+        "Jazz",
+    ]
+
+    updated, normalized, is_negative, _ = apply_preference_update(
+        existing,
+        "You dislike Pop now, unfortunately.",
+    )
+
+    assert is_negative is True
+    assert normalized == "You dislike Pop now, unfortunately"
+    assert "Pop" not in updated
+    assert all("pop" not in item.lower() or item.lower() == normalized.lower() for item in updated)
+    assert "You love Jazz." in updated
+    assert "Jazz" in updated

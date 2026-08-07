@@ -10,6 +10,7 @@ from ..database.memory_repository import save_preferences_list, load_preferences
 
 POSITIVE_PREFERENCE_PATTERNS = [
     re.compile(r"^i\s+(?:really\s+)?(?:like|love|prefer)\s+(.+)$", re.IGNORECASE),
+    re.compile(r"^you\s+(?:really\s+)?(?:like|love|prefer)\s+(.+)$", re.IGNORECASE),
     re.compile(r"^i\s+am\s+interested\s+in\s+(.+)$", re.IGNORECASE),
     re.compile(r"^i'?m\s+interested\s+in\s+(.+)$", re.IGNORECASE),
     re.compile(r"^i\s+am\s+interested\s+(.+)$", re.IGNORECASE),
@@ -18,14 +19,29 @@ POSITIVE_PREFERENCE_PATTERNS = [
 
 NEGATIVE_PREFERENCE_PATTERNS = [
     re.compile(r"^i\s+(?:do\s+not|don't)\s+like\s+(.+)$", re.IGNORECASE),
+    re.compile(r"^you\s+(?:do\s+not|don't)\s+like\s+(.+)$", re.IGNORECASE),
     re.compile(r"^i\s+(?:do\s+not|don't)\s+prefer\s+(.+)$", re.IGNORECASE),
+    re.compile(r"^you\s+(?:do\s+not|don't)\s+prefer\s+(.+)$", re.IGNORECASE),
     re.compile(r"^i\s+(?:dislike|hate)\s+(.+)$", re.IGNORECASE),
+    re.compile(r"^you\s+(?:dislike|hate)\s+(.+)$", re.IGNORECASE),
     re.compile(r"^i\s+(?:am\s+not|'?m\s+not)\s+interested\s+in\s+(.+)$", re.IGNORECASE),
+    re.compile(r"^you\s+are\s+not\s+interested\s+in\s+(.+)$", re.IGNORECASE),
 ]
+
+_TRAILING_MODIFIERS_RE = re.compile(
+    r"(?:\s*,?\s*(?:now|currently|at\s+the\s+moment|these\s+days|unfortunately))+$",
+    re.IGNORECASE,
+)
 
 
 def _collapse_text(text: str) -> str:
     return re.sub(r"\s+", " ", text).strip(" .,!?")
+
+
+def _normalize_subject(text: str) -> str:
+    collapsed = _collapse_text(text)
+    collapsed = _TRAILING_MODIFIERS_RE.sub("", collapsed)
+    return _collapse_text(collapsed)
 
 
 def parse_preference_statement(preference_text: str) -> tuple[str, bool]:
@@ -34,14 +50,14 @@ def parse_preference_statement(preference_text: str) -> tuple[str, bool]:
     for pattern in NEGATIVE_PREFERENCE_PATTERNS:
         match = pattern.match(cleaned)
         if match:
-            return _collapse_text(match.group(1)), True
+            return _normalize_subject(match.group(1)), True
 
     for pattern in POSITIVE_PREFERENCE_PATTERNS:
         match = pattern.match(cleaned)
         if match:
-            return _collapse_text(match.group(1)), False
+            return _normalize_subject(match.group(1)), False
 
-    return cleaned, False
+    return _normalize_subject(cleaned), False
 
 
 def normalize_preference_statement(preference_text: str) -> str:
