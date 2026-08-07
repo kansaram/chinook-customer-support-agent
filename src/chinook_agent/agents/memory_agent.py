@@ -13,12 +13,22 @@ from ..tools.preference_tools import (
     preference_subject_key,
     llm_parse_preference,
 )
+from ..tools.handoff_tools import transfer_to_invoice_agent, transfer_to_catalog_agent
 from ..database.memory_repository import load_preferences_list, save_preferences_list
 from ..config.logging import get_logger
 
 logger = get_logger(__name__)
 
-MEMORY_TOOLS = [save_preference, get_preferences]
+# save_preference is intentionally NOT bound here. The deterministic scan below
+# (_extract_explicit_music_preferences + _persist_preferences) already guarantees
+# every explicit preference statement gets saved, in both primary and background
+# mode, before the LLM ever runs. Having the LLM also call save_preference itself
+# was a redundant round-trip that never actually changed the outcome (the merge
+# in _persist_preferences is idempotent) — removing it simplifies the tool surface
+# without losing any capability. get_preferences stays bound as a fallback for
+# preference-lookup phrasings the deterministic PREFERENCE_LOOKUP_PATTERNS list
+# doesn't recognize.
+MEMORY_TOOLS = [get_preferences, transfer_to_invoice_agent, transfer_to_catalog_agent]
 llm = ChatOpenAI(model=settings.DEFAULT_MODEL, temperature=0).bind_tools(MEMORY_TOOLS)
 
 EMAIL_RE = re.compile(r"[\w.+-]+@[\w-]+\.[\w.-]+")
@@ -32,9 +42,8 @@ PREFERENCE_LOOKUP_PATTERNS = [
 ]
 
 # NOTE: intentionally narrower/differently-anchored than preference_tools' patterns
-# (uses \b instead of ^, and only covers a subset of phrasings). Kept as-is to avoid
-# changing existing detection behavior — sentences this list misses now fall through
-# to the LLM fallback below instead of being silently dropped.
+# (uses \b instead of ^, and only covers a subset of phrasings). Kept as documented
+# debt — unifying the two lists risks changing which sentences trigger detection.
 PREFERENCE_PATTERNS = [
     re.compile(r"\bi\s+(?:really\s+)?(?:like|love|prefer)\s+(.+)$", re.IGNORECASE),
     re.compile(r"\b(.+?)\s+is\s+my\s+favorite\b", re.IGNORECASE),
@@ -120,6 +129,10 @@ def _format_preferences_response(identifier: str, preferences: list[str]) -> str
 def _extract_explicit_music_preferences(messages: list) -> list[str]:
     """Extract explicit preference statements from user messages only.
 
+    `messages` is expected to be ONLY the slice of messages not yet scanned (see
+    memory_llm_node) — this function itself doesn't know or care about scan
+    position, it just processes whatever it's given.
+
     Order: regex patterns first (cheap, deterministic, unchanged from before).
     Any sentence regex doesn't recognize is then checked with the LLM fallback
     (second option) — this catches phrasings like "I'm really into jazz" that
@@ -180,12 +193,13 @@ def _persist_preferences(identifier: str, base_preferences: list[str], new_items
 def memory_llm_node(state: AgentState) -> dict:
     updates: dict = {}
     is_primary = state.get("next_agent") == "memory_agent"
+    all_messages = state["messages"]
 
     email = state.get("customer_email")
     phone = state.get("customer_phone")
 
     if not email and not phone:
-        extracted = _extract_identifier_from_messages(state["messages"])
+        extracted = _extract_identifier_from_messages(all_messages)
         email = extracted["email"]
         phone = extracted["phone"]
         if email:
@@ -201,9 +215,16 @@ def memory_llm_node(state: AgentState) -> dict:
 
     if identifier and not state.get("preferences_loaded"):
         loaded = load_preferences_list(identifier)
-        updates["preferences"] = loaded
+        sanitized_loaded = merge_preference_statements([], loaded)
+        if sanitized_loaded != loaded:
+            save_preferences_list(identifier, sanitized_loaded)
+            logger.info(
+                "sanitized stale/duplicate preferences on load",
+                extra={"identifier": identifier, "before": loaded, "after": sanitized_loaded},
+            )
+        updates["preferences"] = sanitized_loaded
         updates["preferences_loaded"] = True
-        logger.info("preferences loaded", extra={"identifier": identifier, "count": len(loaded)})
+        logger.info("preferences loaded", extra={"identifier": identifier, "count": len(sanitized_loaded)})
 
     # Explicit "show my preferences" request — answer directly, even in background
     # mode. This is what makes "here's my email, what are my preferences" work in
@@ -211,9 +232,18 @@ def memory_llm_node(state: AgentState) -> dict:
     # primary agent, but only memory_agent can actually answer this part, so it
     # sets `response` itself. The `set_response` reducer on state["response"]
     # makes this safe even if the primary agent also sets a response this turn.
-    if _wants_saved_preferences(state["messages"]):
+    if _wants_saved_preferences(all_messages):
         if identifier:
             preferences = updates.get("preferences", state.get("preferences", []))
+            sanitized = merge_preference_statements([], preferences)
+            if sanitized != preferences:
+                save_preferences_list(identifier, sanitized)
+                logger.info(
+                    "sanitized stale/duplicate preferences before display",
+                    extra={"identifier": identifier, "before": preferences, "after": sanitized},
+                )
+                preferences = sanitized
+                updates["preferences"] = sanitized
             updates["response"] = _format_preferences_response(identifier, preferences)
         else:
             updates["response"] = (
@@ -229,8 +259,16 @@ def memory_llm_node(state: AgentState) -> dict:
         updates["pending_preferences"] = []
         logger.info("flushed pending preferences", extra={"identifier": identifier, "count": len(pending)})
 
-    # Deterministic preference capture each turn for explicit user statements.
-    detected = _extract_explicit_music_preferences(state["messages"])
+    # Deterministic preference capture — only scan messages not yet scanned, instead
+    # of reprocessing the entire conversation every turn. Dedup within a turn still
+    # applies via seen_lower/pending_subjects, but this avoids the ever-growing cost
+    # (including repeated LLM-fallback calls for the same already-failed sentences)
+    # that came from rescanning the full history on every single node invocation.
+    scanned_count = state.get("preferences_scanned_count", 0)
+    new_messages = all_messages[scanned_count:]
+    updates["preferences_scanned_count"] = len(all_messages)
+
+    detected = _extract_explicit_music_preferences(new_messages)
     if detected:
         pending_now = updates.get("pending_preferences", state.get("pending_preferences", []))
         pending_subjects = {preference_subject_key(item) for item in pending_now}
@@ -267,7 +305,7 @@ def memory_llm_node(state: AgentState) -> dict:
     if not is_primary:
         return updates
 
-    messages = [{"role": "system", "content": MEMORY_AGENT_PROMPT}] + state["messages"]
+    messages = [{"role": "system", "content": MEMORY_AGENT_PROMPT}] + all_messages
     response = llm.invoke(messages)
     updates["messages"] = [response]
 

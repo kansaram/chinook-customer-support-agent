@@ -57,5 +57,6 @@ class AgentState(TypedDict):
     preferences: Annotated[list[str], add_preferences]
     pending_preferences: Annotated[list[str], replace_or_append_preferences]
     preferences_loaded: bool
+    preferences_scanned_count: int
     next_agent: Optional[str]
     response: Annotated[Optional[str], set_response]
