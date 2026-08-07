@@ -1,3 +1,4 @@
+import re
 from typing import Annotated
 from pydantic import BaseModel, Field
 from langchain_core.tools import tool, InjectedToolCallId
@@ -77,12 +78,15 @@ class PreferenceSuggestionInput(BaseModel):
 
 
 def _preference_candidates(preference: str) -> list[str]:
-    raw = preference.strip()
-    lowered = raw.lower()
+    fragments = [fragment.strip() for fragment in re.split(r"\s*;\s*|\n+", preference) if fragment.strip()]
+    candidates: list[str] = []
     prefixes = [
         "i like ",
+        "you like ",
         "i love ",
+        "you love ",
         "i prefer ",
+        "you prefer ",
         "my favorite genre is ",
         "my favourite genre is ",
         "favorite genre is ",
@@ -90,13 +94,28 @@ def _preference_candidates(preference: str) -> list[str]:
         "prefer ",
         "like ",
         "love ",
+        "dislike ",
+        "you dislike ",
     ]
-    for prefix in prefixes:
-        if lowered.startswith(prefix):
-            cleaned = raw[len(prefix):].strip(" .,!?")
-            if cleaned:
-                return [cleaned, raw]
-    return [raw]
+    for raw in fragments or [preference.strip()]:
+        lowered = raw.lower()
+        for prefix in prefixes:
+            if lowered.startswith(prefix):
+                cleaned = raw[len(prefix):].strip(" .,!?")
+                if cleaned:
+                    candidates.extend([cleaned, raw])
+                break
+        else:
+            candidates.append(raw)
+
+    deduped: list[str] = []
+    seen: set[str] = set()
+    for item in candidates:
+        key = item.lower()
+        if key not in seen:
+            deduped.append(item)
+            seen.add(key)
+    return deduped
 
 
 @tool("search_tracks_by_artist", description="Find tracks/songs by an artist name, with fuzzy matching, total count, and a sample of results.")

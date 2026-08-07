@@ -2,6 +2,7 @@ import types
 
 from chinook_agent.agents import memory_agent
 from chinook_agent.agents.state import add_preferences
+from chinook_agent.database.memory_repository import save_preferences_list
 
 
 class _DummyResponse:
@@ -82,9 +83,9 @@ def test_memory_llm_node_saves_detected_preferences_with_identifier(monkeypatch)
 
 	assert calls
 	assert calls[0][0] == "email:fan@example.com"
-	assert "AC/DC is my favorite" in calls[0][1]
+	assert "You like AC/DC" in calls[0][1]
 	assert "preferences" in updates
-	assert "AC/DC is my favorite" in updates["preferences"]
+	assert "You like AC/DC" in updates["preferences"]
 
 
 def test_memory_llm_node_does_not_append_existing_preference_case_insensitively(monkeypatch):
@@ -143,10 +144,37 @@ def test_memory_llm_node_records_contradicting_negative_preference(monkeypatch):
 
 	assert calls
 	assert calls[0][0] == "email:fan@example.com"
-	assert "I don't like Rock" in calls[0][1]
+	assert "You dislike Rock" in calls[0][1]
 	assert "preferences" in updates
-	assert "I don't like Rock" in updates["preferences"]
+	assert "You dislike Rock" in updates["preferences"]
 	assert "I love Rock" not in calls[0][1]
+
+
+def test_memory_llm_node_returns_saved_preferences_when_email_and_lookup_are_in_same_message(monkeypatch):
+	email = "fan-lookup@example.com"
+	save_preferences_list(f"email:{email}", ["You like Pop; You dislike Jazz"])
+
+	state = {
+		"messages": [
+			{"role": "user", "content": f"Hi my email is {email}. could you please give me my preferences"},
+		],
+		"customer_id": None,
+		"customer_email": None,
+		"customer_phone": None,
+		"authenticated": False,
+		"preferences": [],
+		"pending_preferences": [],
+		"preferences_loaded": False,
+		"next_agent": "memory_agent",
+		"response": None,
+	}
+
+	updates = memory_agent.memory_llm_node(state)
+
+	assert updates["response"]
+	assert "Here are your saved preferences" in updates["response"]
+	assert "You like Pop" in updates["response"]
+	assert "You dislike Jazz" in updates["response"]
 
 
 def test_resolve_identifier_prefers_email_over_customer_id():

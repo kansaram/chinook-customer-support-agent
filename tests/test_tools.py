@@ -6,7 +6,8 @@ from chinook_agent.tools.catalog_tools import search_song_by_title_fuzzy_tool
 from chinook_agent.tools.catalog_tools import search_tracks_by_composer_tool
 from chinook_agent.tools.catalog_tools import get_track_details_by_id_tool
 from chinook_agent.tools.catalog_tools import suggest_catalog_from_preferences_tool
-from chinook_agent.tools.preference_tools import save_preference, apply_preference_update
+from chinook_agent.tools.preference_tools import save_preference, apply_preference_update, merge_preference_statements
+from chinook_agent.database.memory_repository import load_preferences_list
 
 _TOOL_CALL_ID = "test-call-id"
 
@@ -179,6 +180,27 @@ def test_save_preference_without_identifier_queues_preference():
     assert cmd.update["pending_preferences"] == ["I like Jazz"]
 
 
+def test_save_preference_stores_single_summary_entry_per_customer():
+    email = f"single-entry-{uuid4().hex[:8]}@example.com"
+    state = {
+        "customer_id": None,
+        "customer_email": email,
+        "customer_phone": None,
+        "preferences": [],
+        "pending_preferences": [],
+    }
+
+    save_preference.invoke(
+        _tool_call("save_preference", {"input": {"preference": "I like Pop"}, "state": state})
+    )
+    save_preference.invoke(
+        _tool_call("save_preference", {"input": {"preference": "I do not like Jazz"}, "state": state})
+    )
+
+    stored = load_preferences_list(f"email:{email}")
+    assert stored == ["You like Pop; You dislike Jazz"]
+
+
 def test_apply_preference_update_removes_existing_subject_entries_on_contradiction():
     existing = [
         "You like Pop and catchy music.",
@@ -198,3 +220,13 @@ def test_apply_preference_update_removes_existing_subject_entries_on_contradicti
     assert all("pop" not in item.lower() or item.lower() == normalized.lower() for item in updated)
     assert "You love Jazz." in updated
     assert "Jazz" in updated
+
+
+def test_merge_preference_statements_normalizes_filler_phrases_and_replaces_subject():
+    merged = merge_preference_statements([], [
+        "You dislike Pop",
+        "now I like pop",
+        "You dislike Jazz",
+    ])
+
+    assert merged == ["You like pop; You dislike Jazz"]

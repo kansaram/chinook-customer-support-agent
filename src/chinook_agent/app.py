@@ -9,6 +9,7 @@ from chinook_agent.graph import build_graph
 
 compiled_graph = build_graph()
 
+
 def handle_message(user_message: str, history, thread_id: str):
     config = {"configurable": {"thread_id": thread_id}}
     result = compiled_graph.invoke(
@@ -42,11 +43,16 @@ def handle_shutdown(_signum=None, _frame=None) -> None:
     close_demo()
     raise SystemExit(0)
 
+
 with gr.Blocks() as demo:
     gr.Markdown("# Chinook Customer Support Agent")
     gr.Markdown("Ask about invoices, tracks, artists, genres, and music preferences.")
 
-    session_thread_id = gr.State(create_thread_id())
+    # IMPORTANT: pass the function itself (no parentheses) so Gradio calls it once
+    # PER SESSION. Passing create_thread_id() would call it once at app startup and
+    # share that single thread_id across every visitor, mixing their conversations.
+    session_thread_id = gr.State(create_thread_id)
+
     chatbot = gr.Chatbot(label="Support Chat")
     message = gr.Textbox(label="Message", placeholder="Ask about artists, tracks, invoices, or preferences...")
     clear = gr.Button("Clear")
