@@ -1,87 +1,103 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="820" viewBox="0 0 1400 820" role="img" aria-label="Chinook Customer Support Agent architecture diagram">
+<svg xmlns="http://www.w3.org/2000/svg" width="1480" height="880" viewBox="0 0 1480 880" role="img" aria-label="Chinook Customer Support Agent architecture diagram">
   <defs>
     <style>
-      .bg { fill: #f7f9fc; }
-      .panel { fill: #ffffff; stroke: #d4d9e2; stroke-width: 2; rx: 14; }
-      .node { fill: #ffffff; stroke: #2a4f8f; stroke-width: 2.2; rx: 12; }
-      .tool { fill: #eef5ff; stroke: #2a4f8f; stroke-width: 2; rx: 12; }
-      .end { fill: #e9f8ef; stroke: #2e7d4f; stroke-width: 2.2; }
-      .title { font: 700 34px 'Segoe UI', Tahoma, sans-serif; fill: #1f2a44; }
-      .subtitle { font: 600 19px 'Segoe UI', Tahoma, sans-serif; fill: #344a74; }
-      .label { font: 600 18px 'Segoe UI', Tahoma, sans-serif; fill: #18305f; }
-      .small { font: 500 15px 'Segoe UI', Tahoma, sans-serif; fill: #3c4d72; }
-      .arrow { stroke: #355b9f; stroke-width: 2.8; fill: none; }
-      .arrow-soft { stroke: #5e78ad; stroke-width: 2.4; fill: none; stroke-dasharray: 7 6; }
+      .bg { fill: #f6f8fc; }
+      .panel { fill: #ffffff; stroke: #d3dbea; stroke-width: 2; rx: 16; }
+      .node { fill: #ffffff; stroke: #24508f; stroke-width: 2.2; rx: 13; }
+      .tool { fill: #eef4ff; stroke: #24508f; stroke-width: 2; rx: 13; }
+      .logic { fill: #fff7e8; stroke: #b17a1f; stroke-width: 2; rx: 13; }
+      .end { fill: #e8f8ef; stroke: #2f7d4c; stroke-width: 2.2; }
+      .title { font: 700 34px 'Segoe UI', Tahoma, sans-serif; fill: #1e2c48; }
+      .subtitle { font: 600 19px 'Segoe UI', Tahoma, sans-serif; fill: #304b79; }
+      .label { font: 600 18px 'Segoe UI', Tahoma, sans-serif; fill: #173464; }
+      .small { font: 500 15px 'Segoe UI', Tahoma, sans-serif; fill: #3b517b; }
+      .arrow { stroke: #2f5b9f; stroke-width: 2.8; fill: none; }
+      .arrow-soft { stroke: #6b82b4; stroke-width: 2.4; fill: none; stroke-dasharray: 7 6; }
+      .arrow-warn { stroke: #b17a1f; stroke-width: 2.5; fill: none; stroke-dasharray: 8 6; }
     </style>
     <marker id="arrowhead" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto" markerUnits="strokeWidth">
-      <path d="M0,0 L10,4 L0,8 z" fill="#355b9f" />
+      <path d="M0,0 L10,4 L0,8 z" fill="#2f5b9f" />
     </marker>
     <marker id="arrowheadSoft" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto" markerUnits="strokeWidth">
-      <path d="M0,0 L10,4 L0,8 z" fill="#5e78ad" />
+      <path d="M0,0 L10,4 L0,8 z" fill="#6b82b4" />
+    </marker>
+    <marker id="arrowheadWarn" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L10,4 L0,8 z" fill="#b17a1f" />
     </marker>
   </defs>
 
-  <rect class="bg" x="0" y="0" width="1400" height="820" />
+  <rect class="bg" x="0" y="0" width="1480" height="880" />
 
-  <text class="title" x="700" y="56" text-anchor="middle">Chinook Customer Support Agent Graph</text>
-  <text class="subtitle" x="700" y="88" text-anchor="middle">Supervisor routes each turn to invoice, catalog, or memory flows</text>
+  <text class="title" x="740" y="58" text-anchor="middle">Chinook Customer Support Agent Graph</text>
+  <text class="subtitle" x="740" y="92" text-anchor="middle">Supervisor routing, agent tool loops, and deterministic memory lookup path</text>
 
-  <rect class="panel" x="40" y="120" width="1320" height="650" />
+  <rect class="panel" x="44" y="126" width="1392" height="712" />
 
-  <rect class="node" x="580" y="165" width="240" height="74" />
-  <text class="label" x="700" y="209" text-anchor="middle">supervisor</text>
+  <rect class="node" x="620" y="168" width="240" height="74" />
+  <text class="label" x="740" y="212" text-anchor="middle">supervisor</text>
 
-  <rect class="node" x="120" y="300" width="250" height="74" />
-  <text class="label" x="245" y="344" text-anchor="middle">invoice_agent</text>
+  <rect class="node" x="110" y="316" width="250" height="74" />
+  <text class="label" x="235" y="360" text-anchor="middle">invoice_agent</text>
 
-  <rect class="node" x="575" y="300" width="250" height="74" />
-  <text class="label" x="700" y="344" text-anchor="middle">catalog_agent</text>
+  <rect class="node" x="615" y="316" width="250" height="74" />
+  <text class="label" x="740" y="360" text-anchor="middle">catalog_agent</text>
 
-  <rect class="node" x="1030" y="300" width="250" height="74" />
-  <text class="label" x="1155" y="344" text-anchor="middle">memory_agent</text>
+  <rect class="node" x="1120" y="316" width="250" height="74" />
+  <text class="label" x="1245" y="360" text-anchor="middle">memory_agent</text>
 
-  <rect class="tool" x="120" y="470" width="250" height="74" />
-  <text class="label" x="245" y="514" text-anchor="middle">invoice_tools</text>
+  <rect class="tool" x="110" y="492" width="250" height="74" />
+  <text class="label" x="235" y="536" text-anchor="middle">invoice_tools</text>
 
-  <rect class="tool" x="575" y="470" width="250" height="74" />
-  <text class="label" x="700" y="514" text-anchor="middle">catalog_tools</text>
+  <rect class="tool" x="615" y="492" width="250" height="74" />
+  <text class="label" x="740" y="536" text-anchor="middle">catalog_tools</text>
 
-  <rect class="tool" x="1030" y="470" width="250" height="74" />
-  <text class="label" x="1155" y="514" text-anchor="middle">memory_tools</text>
+  <rect class="tool" x="1120" y="492" width="250" height="74" />
+  <text class="label" x="1245" y="536" text-anchor="middle">memory_tools</text>
 
-  <circle class="end" cx="700" cy="670" r="48" />
-  <text class="label" x="700" y="676" text-anchor="middle">END</text>
+  <rect class="logic" x="1040" y="616" width="410" height="114" />
+  <text class="label" x="1245" y="650" text-anchor="middle">Deterministic memory logic</text>
+  <text class="small" x="1245" y="678" text-anchor="middle">If user asks for saved preferences:</text>
+  <text class="small" x="1245" y="702" text-anchor="middle">extract identifier - load DB - return direct response</text>
 
-  <path class="arrow" marker-end="url(#arrowhead)" d="M630 239 C520 270, 390 290, 290 300" />
-  <text class="small" x="470" y="258">invoice_agent</text>
+  <circle class="end" cx="740" cy="748" r="50" />
+  <text class="label" x="740" y="754" text-anchor="middle">END</text>
 
-  <path class="arrow" marker-end="url(#arrowhead)" d="M700 239 L700 300" />
-  <text class="small" x="714" y="278">catalog_agent</text>
+  <path class="arrow" marker-end="url(#arrowhead)" d="M690 242 C565 276, 420 299, 300 316" />
+  <text class="small" x="500" y="268">invoice_agent</text>
 
-  <path class="arrow" marker-end="url(#arrowhead)" d="M770 239 C880 270, 1010 290, 1115 300" />
-  <text class="small" x="896" y="258">memory_agent</text>
+  <path class="arrow" marker-end="url(#arrowhead)" d="M740 242 L740 316" />
+  <text class="small" x="754" y="285">catalog_agent</text>
 
-  <path class="arrow-soft" marker-end="url(#arrowheadSoft)" d="M820 210 C960 230, 1070 260, 1115 300" />
-  <text class="small" x="980" y="222">catalog turn also runs memory</text>
+  <path class="arrow" marker-end="url(#arrowhead)" d="M790 242 C915 276, 1060 299, 1180 316" />
+  <text class="small" x="976" y="268">memory_agent</text>
 
-  <path class="arrow" marker-end="url(#arrowhead)" d="M245 374 L245 470" />
-  <text class="small" x="258" y="425">tool call</text>
-  <path class="arrow" marker-end="url(#arrowhead)" d="M270 470 C310 442, 320 405, 286 374" />
+  <path class="arrow-soft" marker-end="url(#arrowheadSoft)" d="M860 214 C1000 238, 1120 274, 1180 316" />
+  <text class="small" x="1048" y="226">catalog turn also runs memory in parallel</text>
 
-  <path class="arrow" marker-end="url(#arrowhead)" d="M700 374 L700 470" />
-  <text class="small" x="713" y="425">tool call</text>
-  <path class="arrow" marker-end="url(#arrowhead)" d="M726 470 C767 442, 776 405, 742 374" />
+  <path class="arrow" marker-end="url(#arrowhead)" d="M235 390 L235 492" />
+  <text class="small" x="250" y="444">tool call</text>
+  <path class="arrow" marker-end="url(#arrowhead)" d="M260 492 C300 462, 311 420, 278 390" />
 
-  <path class="arrow" marker-end="url(#arrowhead)" d="M1155 374 L1155 470" />
-  <text class="small" x="1168" y="425">tool call</text>
-  <path class="arrow" marker-end="url(#arrowhead)" d="M1180 470 C1221 442, 1230 405, 1196 374" />
+  <path class="arrow" marker-end="url(#arrowhead)" d="M740 390 L740 492" />
+  <text class="small" x="754" y="444">tool call</text>
+  <path class="arrow" marker-end="url(#arrowhead)" d="M766 492 C807 462, 817 420, 783 390" />
 
-  <path class="arrow" marker-end="url(#arrowhead)" d="M245 374 C340 565, 535 626, 652 656" />
-  <text class="small" x="360" y="590">no tool call</text>
+  <path class="arrow" marker-end="url(#arrowhead)" d="M1245 390 L1245 492" />
+  <text class="small" x="1258" y="444">tool call</text>
+  <path class="arrow" marker-end="url(#arrowhead)" d="M1270 492 C1311 462, 1320 420, 1286 390" />
 
-  <path class="arrow" marker-end="url(#arrowhead)" d="M700 374 L700 622" />
-  <text class="small" x="714" y="593">no tool call</text>
+  <path class="arrow-warn" marker-end="url(#arrowheadWarn)" d="M1245 566 L1245 616" />
+  <text class="small" x="1262" y="602">lookup shortcut</text>
 
-  <path class="arrow" marker-end="url(#arrowhead)" d="M1155 374 C1060 565, 865 626, 748 656" />
-  <text class="small" x="930" y="590">no tool call</text>
+  <path class="arrow" marker-end="url(#arrowhead)" d="M235 390 C324 600, 548 678, 688 730" />
+  <text class="small" x="372" y="622">no tool call</text>
+
+  <path class="arrow" marker-end="url(#arrowhead)" d="M740 390 L740 690" />
+  <text class="small" x="754" y="650">no tool call</text>
+
+  <path class="arrow" marker-end="url(#arrowhead)" d="M1245 730 C1110 768, 936 778, 790 758" />
+  <text class="small" x="1048" y="804">direct preference response</text>
+
+  <path class="arrow" marker-end="url(#arrowhead)" d="M1245 390 C1150 602, 935 677, 790 730" />
+  <text class="small" x="972" y="622">no tool call</text>
 </svg>

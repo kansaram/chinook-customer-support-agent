@@ -1,12 +1,12 @@
 # Chinook Customer Support Agent
 
-## Architecture Graph
+## Agent Architecture Diagram
 
 <img src="docs/agent-architecture-diagram.svg" alt="Agent Architecture Diagram" width="100%" />
 
 Open directly: [docs/agent-architecture-diagram.svg](docs/agent-architecture-diagram.svg)
 
-## Request Execution Flow
+## Request Execution Diagram
 
 <img src="docs/request-execution-flow.svg" alt="Request Execution Flow Diagram" width="100%" />
 

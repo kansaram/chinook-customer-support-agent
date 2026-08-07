@@ -1,85 +1,101 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="900" viewBox="0 0 1400 900" role="img" aria-label="Chinook request execution flow diagram">
+<svg xmlns="http://www.w3.org/2000/svg" width="1460" height="980" viewBox="0 0 1460 980" role="img" aria-label="Chinook request execution flow diagram">
   <defs>
     <style>
-      .bg { fill: #fbfcff; }
-      .lane { stroke: #cfd8ea; stroke-width: 2; }
-      .head { fill: #ecf2ff; stroke: #335b9e; stroke-width: 2; rx: 10; }
-      .step { fill: #ffffff; stroke: #335b9e; stroke-width: 2; rx: 10; }
-      .note { fill: #f5f8ff; stroke: #8ca4d4; stroke-width: 1.6; rx: 8; }
+      .bg { fill: #f8fafd; }
+      .lane { stroke: #d0d9ea; stroke-width: 2; }
+      .head { fill: #edf3ff; stroke: #2e5a9f; stroke-width: 2; rx: 10; }
+      .step { fill: #ffffff; stroke: #2e5a9f; stroke-width: 2; rx: 10; }
+      .decision { fill: #fff7e8; stroke: #b17a1f; stroke-width: 2; rx: 10; }
+      .note { fill: #f5f8ff; stroke: #87a1d0; stroke-width: 1.6; rx: 8; }
       .title { font: 700 33px 'Segoe UI', Tahoma, sans-serif; fill: #1f2a44; }
-      .label { font: 600 17px 'Segoe UI', Tahoma, sans-serif; fill: #1b3364; }
-      .small { font: 500 14px 'Segoe UI', Tahoma, sans-serif; fill: #44577f; }
-      .arrow { stroke: #355b9f; stroke-width: 2.5; fill: none; }
-      .arrow-dash { stroke: #5d78b0; stroke-width: 2.2; fill: none; stroke-dasharray: 7 6; }
-      .branch { fill: #eaf0fc; stroke: #6783b8; stroke-width: 1.8; rx: 8; }
+      .label { font: 600 17px 'Segoe UI', Tahoma, sans-serif; fill: #193564; }
+      .small { font: 500 14px 'Segoe UI', Tahoma, sans-serif; fill: #42567f; }
+      .arrow { stroke: #2f5b9f; stroke-width: 2.5; fill: none; }
+      .arrow-dash { stroke: #667db1; stroke-width: 2.2; fill: none; stroke-dasharray: 7 6; }
+      .arrow-warn { stroke: #b17a1f; stroke-width: 2.3; fill: none; stroke-dasharray: 8 6; }
     </style>
     <marker id="arr" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto" markerUnits="strokeWidth">
-      <path d="M0,0 L10,4 L0,8 z" fill="#355b9f" />
+      <path d="M0,0 L10,4 L0,8 z" fill="#2f5b9f" />
+    </marker>
+    <marker id="arrWarn" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L10,4 L0,8 z" fill="#b17a1f" />
     </marker>
   </defs>
 
-  <rect class="bg" x="0" y="0" width="1400" height="900"/>
-  <text class="title" x="700" y="54" text-anchor="middle">Request Execution Flow</text>
+  <rect class="bg" x="0" y="0" width="1460" height="980"/>
+  <text class="title" x="730" y="56" text-anchor="middle">Request Execution Flow</text>
 
-  <rect class="head" x="70" y="86" width="140" height="46"/><text class="label" x="140" y="115" text-anchor="middle">User</text>
-  <rect class="head" x="250" y="86" width="160" height="46"/><text class="label" x="330" y="115" text-anchor="middle">Supervisor</text>
-  <rect class="head" x="470" y="86" width="170" height="46"/><text class="label" x="555" y="115" text-anchor="middle">Invoice Agent</text>
-  <rect class="head" x="700" y="86" width="170" height="46"/><text class="label" x="785" y="115" text-anchor="middle">Catalog Agent</text>
-  <rect class="head" x="930" y="86" width="170" height="46"/><text class="label" x="1015" y="115" text-anchor="middle">Memory Agent</text>
-  <rect class="head" x="1160" y="86" width="170" height="46"/><text class="label" x="1245" y="115" text-anchor="middle">Tool Node</text>
+  <rect class="head" x="72" y="90" width="140" height="46"/><text class="label" x="142" y="119" text-anchor="middle">User</text>
+  <rect class="head" x="258" y="90" width="170" height="46"/><text class="label" x="343" y="119" text-anchor="middle">Supervisor</text>
+  <rect class="head" x="480" y="90" width="180" height="46"/><text class="label" x="570" y="119" text-anchor="middle">Invoice Agent</text>
+  <rect class="head" x="710" y="90" width="180" height="46"/><text class="label" x="800" y="119" text-anchor="middle">Catalog Agent</text>
+  <rect class="head" x="940" y="90" width="180" height="46"/><text class="label" x="1030" y="119" text-anchor="middle">Memory Agent</text>
+  <rect class="head" x="1170" y="90" width="180" height="46"/><text class="label" x="1260" y="119" text-anchor="middle">Tool Node</text>
 
-  <line class="lane" x1="140" y1="140" x2="140" y2="850"/>
-  <line class="lane" x1="330" y1="140" x2="330" y2="850"/>
-  <line class="lane" x1="555" y1="140" x2="555" y2="850"/>
-  <line class="lane" x1="785" y1="140" x2="785" y2="850"/>
-  <line class="lane" x1="1015" y1="140" x2="1015" y2="850"/>
-  <line class="lane" x1="1245" y1="140" x2="1245" y2="850"/>
+  <line class="lane" x1="142" y1="144" x2="142" y2="930"/>
+  <line class="lane" x1="343" y1="144" x2="343" y2="930"/>
+  <line class="lane" x1="570" y1="144" x2="570" y2="930"/>
+  <line class="lane" x1="800" y1="144" x2="800" y2="930"/>
+  <line class="lane" x1="1030" y1="144" x2="1030" y2="930"/>
+  <line class="lane" x1="1260" y1="144" x2="1260" y2="930"/>
 
-  <rect class="step" x="80" y="170" width="120" height="44"/>
-  <text class="small" x="140" y="198" text-anchor="middle">Send message</text>
-  <path class="arrow" marker-end="url(#arr)" d="M200 192 L322 192"/>
+  <rect class="step" x="82" y="178" width="120" height="44"/>
+  <text class="small" x="142" y="206" text-anchor="middle">Send message</text>
+  <path class="arrow" marker-end="url(#arr)" d="M202 200 L335 200"/>
 
-  <rect class="step" x="255" y="250" width="150" height="44"/>
-  <text class="small" x="330" y="278" text-anchor="middle">Classify intent</text>
+  <rect class="step" x="268" y="256" width="150" height="44"/>
+  <text class="small" x="343" y="284" text-anchor="middle">Classify intent</text>
 
-  <rect class="branch" x="218" y="330" width="224" height="92"/>
-  <text class="small" x="330" y="360" text-anchor="middle">Branching decision</text>
-  <text class="small" x="330" y="384" text-anchor="middle">invoice | catalog | memory</text>
+  <rect class="decision" x="230" y="336" width="226" height="98"/>
+  <text class="small" x="343" y="368" text-anchor="middle">Routing decision</text>
+  <text class="small" x="343" y="392" text-anchor="middle">invoice | catalog | memory</text>
+  <text class="small" x="343" y="416" text-anchor="middle">mixed invoice+catalog -> invoice</text>
 
-  <path class="arrow" marker-end="url(#arr)" d="M442 360 L547 360"/>
-  <text class="small" x="492" y="350" text-anchor="middle">invoice</text>
+  <path class="arrow" marker-end="url(#arr)" d="M456 364 L562 364"/>
+  <text class="small" x="508" y="354" text-anchor="middle">invoice</text>
 
-  <path class="arrow" marker-end="url(#arr)" d="M442 384 L777 384"/>
-  <text class="small" x="610" y="374" text-anchor="middle">catalog</text>
+  <path class="arrow" marker-end="url(#arr)" d="M456 388 L792 388"/>
+  <text class="small" x="624" y="378" text-anchor="middle">catalog</text>
 
-  <path class="arrow" marker-end="url(#arr)" d="M442 408 L1007 408"/>
-  <text class="small" x="740" y="398" text-anchor="middle">memory</text>
+  <path class="arrow" marker-end="url(#arr)" d="M456 412 L1022 412"/>
+  <text class="small" x="748" y="402" text-anchor="middle">memory</text>
 
-  <rect class="step" x="490" y="438" width="130" height="44"/>
-  <text class="small" x="555" y="466" text-anchor="middle">Process invoice</text>
-  <path class="arrow" marker-end="url(#arr)" d="M620 460 L1237 460"/>
-  <text class="small" x="930" y="450" text-anchor="middle">optional tool call</text>
-  <path class="arrow" marker-end="url(#arr)" d="M1245 484 L563 484"/>
+  <rect class="step" x="505" y="452" width="130" height="44"/>
+  <text class="small" x="570" y="480" text-anchor="middle">Process invoice</text>
+  <path class="arrow" marker-end="url(#arr)" d="M635 474 L1252 474"/>
+  <text class="small" x="938" y="464" text-anchor="middle">optional tool call</text>
+  <path class="arrow" marker-end="url(#arr)" d="M1260 500 L578 500"/>
 
-  <rect class="step" x="720" y="540" width="130" height="44"/>
-  <text class="small" x="785" y="568" text-anchor="middle">Process catalog</text>
-  <path class="arrow" marker-end="url(#arr)" d="M850 562 L1237 562"/>
-  <text class="small" x="1040" y="552" text-anchor="middle">optional tool call</text>
-  <path class="arrow" marker-end="url(#arr)" d="M1245 586 L793 586"/>
+  <rect class="step" x="735" y="560" width="130" height="44"/>
+  <text class="small" x="800" y="588" text-anchor="middle">Process catalog</text>
+  <path class="arrow" marker-end="url(#arr)" d="M865 582 L1252 582"/>
+  <text class="small" x="1052" y="572" text-anchor="middle">optional tool call</text>
+  <path class="arrow" marker-end="url(#arr)" d="M1260 608 L808 608"/>
 
-  <rect class="step" x="950" y="540" width="130" height="44"/>
-  <text class="small" x="1015" y="568" text-anchor="middle">Memory sync</text>
-  <path class="arrow-dash" marker-end="url(#arr)" d="M850 544 C905 520, 940 515, 950 518"/>
-  <text class="small" x="900" y="505" text-anchor="middle">parallel on catalog turns</text>
-  <path class="arrow" marker-end="url(#arr)" d="M1080 562 L1237 562"/>
-  <path class="arrow" marker-end="url(#arr)" d="M1245 618 L1023 618"/>
+  <rect class="step" x="965" y="560" width="130" height="44"/>
+  <text class="small" x="1030" y="588" text-anchor="middle">Memory sync</text>
+  <path class="arrow-dash" marker-end="url(#arr)" d="M865 548 C920 524, 954 519, 965 522"/>
+  <text class="small" x="910" y="510" text-anchor="middle">parallel on catalog turns</text>
+  <path class="arrow" marker-end="url(#arr)" d="M1095 582 L1252 582"/>
+  <path class="arrow" marker-end="url(#arr)" d="M1260 636 L1038 636"/>
 
-  <rect class="note" x="100" y="760" width="1200" height="80"/>
-  <text class="small" x="700" y="792" text-anchor="middle">Invoice turns: supervisor routes to invoice flow only.</text>
-  <text class="small" x="700" y="816" text-anchor="middle">Catalog turns: supervisor routes to catalog flow and runs memory sync in parallel.</text>
+  <rect class="decision" x="920" y="690" width="220" height="98"/>
+  <text class="small" x="1030" y="724" text-anchor="middle">Asked for saved</text>
+  <text class="small" x="1030" y="748" text-anchor="middle">preferences?</text>
+  <text class="small" x="1030" y="772" text-anchor="middle">yes -> deterministic lookup</text>
 
-  <path class="arrow" marker-end="url(#arr)" d="M555 620 C500 680, 360 720, 148 720"/>
-  <path class="arrow" marker-end="url(#arr)" d="M785 620 C670 700, 420 730, 148 760"/>
-  <path class="arrow" marker-end="url(#arr)" d="M1015 650 C860 760, 520 795, 148 820"/>
-  <text class="small" x="210" y="706">responses return to user</text>
+  <path class="arrow-warn" marker-end="url(#arrWarn)" d="M1030 604 L1030 690"/>
+  <path class="arrow-warn" marker-end="url(#arrWarn)" d="M1140 740 C1204 740, 1230 716, 1260 676"/>
+  <text class="small" x="1202" y="730" text-anchor="middle">load DB by identifier</text>
+  <path class="arrow-warn" marker-end="url(#arrWarn)" d="M1260 670 C1216 820, 860 852, 154 846"/>
+  <text class="small" x="990" y="872" text-anchor="middle">return saved preferences directly</text>
+
+  <rect class="note" x="94" y="882" width="1270" height="74"/>
+  <text class="small" x="730" y="914" text-anchor="middle">Invoice turns route to invoice flow only. Catalog turns route to catalog flow with parallel memory sync.</text>
+  <text class="small" x="730" y="936" text-anchor="middle">Memory preference retrieval is deterministic when user asks for saved preferences and provides identifier context.</text>
+
+  <path class="arrow" marker-end="url(#arr)" d="M570 640 C520 706, 370 736, 150 736"/>
+  <path class="arrow" marker-end="url(#arr)" d="M800 640 C690 722, 430 754, 150 782"/>
+  <path class="arrow" marker-end="url(#arr)" d="M1030 790 C890 846, 540 860, 150 892"/>
+  <text class="small" x="220" y="724">responses return to user</text>
 </svg>
