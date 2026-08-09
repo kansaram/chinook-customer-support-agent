@@ -15,6 +15,7 @@ from ..tools.catalog_tools import (
 )
 from ..tools.preference_tools import get_preferences, save_preference
 from ..tools.handoff_tools import transfer_to_invoice_agent, transfer_to_memory_agent
+from ..agents.grounding_guard import enforce_tool_grounding
 
 logger = get_logger(__name__)
 
@@ -52,6 +53,14 @@ def catalog_llm_node(state: AgentState) -> dict:
     logger.info("catalog_agent invoked", extra={"preference_count": len(preferences)})
 
     response = llm.invoke(messages)
+
+    # Grounding check: if the response makes a specific claim without a tool call
+    # this turn, retry once with an explicit corrective instruction.
+    needs_retry, reason = enforce_tool_grounding(response, state["messages"])
+    if needs_retry:
+        logger.warning("grounding guard triggered a retry", extra={"agent": "catalog_agent"})
+        corrective_messages = messages + [response, {"role": "system", "content": reason}]
+        response = llm.invoke(corrective_messages)
     updates = {"messages": [response]}
 
     # Mark the primary agent's final text response so UI doesn't accidentally pick

@@ -59,4 +59,5 @@ class AgentState(TypedDict):
     preferences_loaded: bool
     preferences_scanned_count: int
     next_agent: Optional[str]
+    handoff_count: int
     response: Annotated[Optional[str], set_response]

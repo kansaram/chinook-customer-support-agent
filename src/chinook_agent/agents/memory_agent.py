@@ -16,6 +16,7 @@ from ..tools.preference_tools import (
 from ..tools.handoff_tools import transfer_to_invoice_agent, transfer_to_catalog_agent
 from ..database.memory_repository import load_preferences_list, save_preferences_list
 from ..config.logging import get_logger
+from ..agents.grounding_guard import enforce_tool_grounding
 
 logger = get_logger(__name__)
 
@@ -91,6 +92,25 @@ def _extract_identifier_from_messages(messages: list) -> dict:
                 "email": email_match.group(0) if email_match else None,
                 "phone": phone_match.group(0) if phone_match else None,
             }
+    return {"email": None, "phone": None}
+
+
+def _extract_identifier_from_latest_message(messages: list) -> dict:
+    """Check ONLY the most recent user message for an explicit email/phone. Used to
+    detect when the customer is intentionally providing a NEW/different identifier
+    mid-conversation (e.g. "check with my phone instead") — this must take priority
+    over whatever was already resolved earlier, so the system actually re-queries
+    under the new identifier instead of silently reusing stale results."""
+    for msg in reversed(messages):
+        if _get_message_role(msg).lower() not in {"user", "human"}:
+            continue
+        content = _get_message_content(msg)
+        email_match = EMAIL_RE.search(content)
+        phone_match = PHONE_RE.search(content)
+        return {
+            "email": email_match.group(0) if email_match else None,
+            "phone": phone_match.group(0) if phone_match else None,
+        }
     return {"email": None, "phone": None}
 
 
@@ -198,14 +218,35 @@ def memory_llm_node(state: AgentState) -> dict:
     email = state.get("customer_email")
     phone = state.get("customer_phone")
 
+    # If the customer's latest message explicitly mentions an identifier, prefer it
+    # over whatever was already resolved earlier — this is what makes "check with
+    # my phone instead" actually trigger a fresh lookup instead of silently reusing
+    # results loaded under a previously-given email.
+    latest_mentioned = _extract_identifier_from_latest_message(all_messages)
+    new_email = latest_mentioned["email"]
+    new_phone = latest_mentioned["phone"]
+
+    identifier_changed = False
+    if new_email and new_email.lower() != (email or "").lower():
+        email, phone = new_email, None
+        identifier_changed = True
+    elif new_phone and new_phone != phone:
+        phone, email = new_phone, None
+        identifier_changed = True
+
     if not email and not phone:
         extracted = _extract_identifier_from_messages(all_messages)
         email = extracted["email"]
         phone = extracted["phone"]
-        if email:
-            updates["customer_email"] = email
-        if phone:
-            updates["customer_phone"] = phone
+
+    if email:
+        updates["customer_email"] = email
+    if phone:
+        updates["customer_phone"] = phone
+    if identifier_changed:
+        # Force a real reload under the new identifier rather than trusting
+        # whatever was cached in state["preferences"] from the old one.
+        updates["preferences_loaded"] = False
 
     identifier = resolve_identifier(
         customer_id=state.get("customer_id"),
@@ -213,7 +254,8 @@ def memory_llm_node(state: AgentState) -> dict:
         phone=phone,
     )
 
-    if identifier and not state.get("preferences_loaded"):
+    preferences_already_loaded = updates.get("preferences_loaded", state.get("preferences_loaded"))
+    if identifier and not preferences_already_loaded:
         loaded = load_preferences_list(identifier)
         sanitized_loaded = merge_preference_statements([], loaded)
         if sanitized_loaded != loaded:
@@ -247,7 +289,7 @@ def memory_llm_node(state: AgentState) -> dict:
             updates["response"] = _format_preferences_response(identifier, preferences)
         else:
             updates["response"] = (
-                "I'd love to look that up, but I need your email, phone, or customer ID first."
+                "I'd love to look that up, but I need your email or phone number first."
             )
         return updates
 
@@ -307,6 +349,14 @@ def memory_llm_node(state: AgentState) -> dict:
 
     messages = [{"role": "system", "content": MEMORY_AGENT_PROMPT}] + all_messages
     response = llm.invoke(messages)
+
+    # Grounding check: if the response makes a specific claim without a tool call
+    # this turn, retry once with an explicit corrective instruction.
+    needs_retry, reason = enforce_tool_grounding(response, state["messages"])
+    if needs_retry:
+        logger.warning("grounding guard triggered a retry", extra={"agent": "catalog_agent"})
+        corrective_messages = messages + [response, {"role": "system", "content": reason}]
+        response = llm.invoke(corrective_messages)
     updates["messages"] = [response]
 
     if not response.tool_calls:
