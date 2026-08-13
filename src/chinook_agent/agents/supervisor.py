@@ -15,10 +15,19 @@ logger = get_logger(__name__)
 
 
 class RouteDecision(BaseModel):
-    agent: Literal["invoice_agent", "catalog_agent", "memory_agent"] = Field(
-        description="Which specialist should handle this turn"
+    agent: Literal["invoice_agent", "catalog_agent", "memory_agent", "off_topic"] = Field(
+        description="Which specialist should handle this turn, or 'off_topic' if the "
+        "request has nothing to do with music, invoices, billing, or preferences"
     )
     reason: str = Field(description="One short phrase explaining the choice, for logging")
+
+
+OFF_TOPIC_DECLINE_MESSAGE = (
+    "I'm the support assistant for this music store — I can only help with things "
+    "like your orders and invoices, finding music in our catalog, or your saved "
+    "preferences. I'm not able to help with that, but let me know if you have a "
+    "question in one of those areas!"
+)
 
 
 router_llm = ChatOpenAI(model=settings.DEFAULT_MODEL, temperature=0).with_structured_output(RouteDecision)
@@ -97,5 +106,13 @@ def supervisor_node(state: AgentState) -> dict:
     except Exception:
         logger.warning("structured routing failed, falling back to catalog_agent", exc_info=True)
         agent_name = "catalog_agent"
+
+    if agent_name == "off_topic":
+        # Reject directly — no sub-agent is ever called for this turn (spec 5.1).
+        return {
+            "next_agent": "off_topic",
+            "response": OFF_TOPIC_DECLINE_MESSAGE,
+            "handoff_count": 0,
+        }
 
     return {"next_agent": agent_name, "handoff_count": 0}

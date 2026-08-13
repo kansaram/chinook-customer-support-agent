@@ -36,7 +36,11 @@ from .tools.handoff_tools import (
 
 
 def route_after_supervisor(state: AgentState) -> list[str]:
+    """Fan out to the primary agent AND memory_agent in parallel, unless memory_agent
+    IS primary, or the supervisor already declined the request directly (off_topic)."""
     primary = state["next_agent"]
+    if primary == "off_topic":
+        return [END]
     branches = [primary]
     if primary != "memory_agent":
         branches.append("memory_agent")
@@ -101,10 +105,15 @@ def build_graph() -> StateGraph:
     graph.add_edge("memory_tools", "memory_agent")
 
     graph.add_conditional_edges(
-        "supervisor",
-        route_after_supervisor,
-        {"invoice_agent": "invoice_agent", "catalog_agent": "catalog_agent", "memory_agent": "memory_agent"},
-    )
+    "supervisor",
+    route_after_supervisor,
+    {
+        "invoice_agent": "invoice_agent",
+        "catalog_agent": "catalog_agent",
+        "memory_agent": "memory_agent",
+        END: END,  # off_topic routes here directly
+    },
+)
 
     checkpointer = MemorySaver()
     return graph.compile(checkpointer=checkpointer)

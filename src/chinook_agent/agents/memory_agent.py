@@ -14,9 +14,9 @@ from ..tools.preference_tools import (
     llm_parse_preference,
 )
 from ..tools.handoff_tools import transfer_to_invoice_agent, transfer_to_catalog_agent
+from ..agents.grounding_guard import enforce_tool_grounding
 from ..database.memory_repository import load_preferences_list, save_preferences_list
 from ..config.logging import get_logger
-from ..agents.grounding_guard import enforce_tool_grounding
 
 logger = get_logger(__name__)
 
@@ -350,13 +350,11 @@ def memory_llm_node(state: AgentState) -> dict:
     messages = [{"role": "system", "content": MEMORY_AGENT_PROMPT}] + all_messages
     response = llm.invoke(messages)
 
-    # Grounding check: if the response makes a specific claim without a tool call
-    # this turn, retry once with an explicit corrective instruction.
-    needs_retry, reason = enforce_tool_grounding(response, state["messages"])
+    needs_retry, reason = enforce_tool_grounding(response, all_messages)
     if needs_retry:
-        logger.warning("grounding guard triggered a retry", extra={"agent": "catalog_agent"})
-        corrective_messages = messages + [response, {"role": "system", "content": reason}]
-        response = llm.invoke(corrective_messages)
+        logger.warning("grounding guard triggered a retry", extra={"agent": "memory_agent"})
+        response = llm.invoke(messages + [response, {"role": "system", "content": reason}])
+
     updates["messages"] = [response]
 
     if not response.tool_calls:
