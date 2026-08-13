@@ -47,6 +47,17 @@ def set_response(existing: Optional[str], new: Optional[str]) -> Optional[str]:
     """
     return new if new is not None else existing
 
+# state.py — replace the existing add_response_parts function with this one:
+
+def add_response_parts(existing: list[str], new: list[str] | None) -> list[str]:
+    """If new is explicitly an empty list, treat it as a reset (start of a new
+    turn). Otherwise append — this is what lets invoice_agent's answer and
+    catalog_agent's answer both survive within ONE turn (e.g. after a handoff),
+    while still starting fresh on the NEXT turn instead of accumulating forever
+    across the whole conversation."""
+    if new == []:
+        return []
+    return existing + [item for item in (new or []) if item]
 
 class AgentState(TypedDict):
     messages: Annotated[list, add_messages]
@@ -61,3 +72,4 @@ class AgentState(TypedDict):
     next_agent: Optional[str]
     handoff_count: int
     response: Annotated[Optional[str], set_response]
+    response_parts: Annotated[list[str], add_response_parts]

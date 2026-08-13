@@ -10,6 +10,7 @@ from ..config.settings import settings
 from ..agents.state import AgentState
 from ..agents.prompts import SUPERVISOR_PROMPT
 from ..config.logging import get_logger
+from ..agents.message_sanitizer import sanitize_message_history
 
 logger = get_logger(__name__)
 
@@ -89,15 +90,15 @@ def supervisor_node(state: AgentState) -> dict:
     # otherwise pull the router toward invoice_agent.
     if latest_user_text and _wants_saved_preferences(latest_user_text):
         logger.info("supervisor routed preference-lookup override", extra={"next_agent": "memory_agent"})
-        return {"next_agent": "memory_agent", "handoff_count": 0}
+        return {"next_agent": "memory_agent", "handoff_count": 0, "response_parts": []}
 
     # Fast path: invoice_agent already asked for an identifier — keep it with
     # invoice_agent regardless of what the reply looks like. No LLM call needed.
     if _invoice_agent_awaiting_identifier(state):
         logger.info("supervisor routed continuation of invoice identification", extra={"next_agent": "invoice_agent"})
-        return {"next_agent": "invoice_agent", "handoff_count": 0}
+        return {"next_agent": "invoice_agent", "handoff_count": 0, "response_parts": []}
 
-    messages = [SystemMessage(content=SUPERVISOR_PROMPT)] + state["messages"]
+    messages = [SystemMessage(content=SUPERVISOR_PROMPT)] + sanitize_message_history(state["messages"])
 
     try:
         decision = router_llm.invoke(messages)
@@ -113,6 +114,7 @@ def supervisor_node(state: AgentState) -> dict:
             "next_agent": "off_topic",
             "response": OFF_TOPIC_DECLINE_MESSAGE,
             "handoff_count": 0,
+            "response_parts": [],
         }
 
-    return {"next_agent": agent_name, "handoff_count": 0}
+    return {"next_agent": agent_name, "handoff_count": 0, "response_parts": []}

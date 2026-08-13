@@ -17,6 +17,10 @@ def handle_message(user_message: str, history, thread_id: str):
         config=config,
     )
 
+    parts = result.get("response_parts")
+    if parts:
+        return "\n\n".join(parts)
+
     if result.get("response"):
         return result["response"]
 

@@ -16,14 +16,17 @@ def make_handoff_tool(*, agent_name: str, description: str):
     """Build a tool that lets an agent hand this turn off to another agent node.
 
     Returns a Command(goto=agent_name, ...) — LangGraph routes execution straight
-    to that node next, regardless of the graph's normal static edges. This is what
-    makes the handoff a genuine agent decision rather than a supervisor rule: any
-    agent can call this itself, mid-reasoning, the moment it realizes the request
-    isn't its job.
+    to that node next, regardless of the graph's normal static edges.
 
-    Caps total handoffs per turn at MAX_HANDOFFS_PER_TURN to prevent two or more
-    agents ping-ponging a request neither wants — once the cap is hit, the tool
-    refuses the handoff and tells the calling agent to answer directly instead.
+    STRUCTURAL SAFETY: if the LLM bundled this handoff with OTHER tool calls in the
+    same AIMessage, navigating away immediately would leave those sibling tool_calls
+    unanswered — OpenAI's API then rejects the next request with "assistant message
+    with 'tool_calls' must be followed by tool messages responding to each
+    tool_call_id". Prompt instructions telling the LLM never to bundle a handoff
+    were NOT reliable in testing (still happened intermittently), so this check
+    enforces it in code: if this isn't the ONLY tool call in the triggering
+    message, refuse to navigate — just respond normally so every sibling call still
+    gets answered, and ask the LLM to retry the handoff alone next turn.
     """
 
     @tool(f"transfer_to_{agent_name}", description=description)
@@ -31,6 +34,29 @@ def make_handoff_tool(*, agent_name: str, description: str):
         state: Annotated[dict, InjectedState],
         tool_call_id: Annotated[str, InjectedToolCallId],
     ) -> Command:
+        # The triggering AIMessage (with the full batch of tool_calls for this step)
+        # is the last message in state at the time ToolNode runs this tool.
+        triggering_message = state["messages"][-1] if state.get("messages") else None
+        batch_tool_calls = getattr(triggering_message, "tool_calls", None) or []
+
+        if len(batch_tool_calls) > 1:
+            logger.warning(
+                "handoff refused: bundled with other tool calls in the same turn",
+                extra={"target": agent_name, "batch_size": len(batch_tool_calls)},
+            )
+            tool_message = ToolMessage(
+                content=(
+                    f"Cannot hand off to {agent_name} right now — you called it together "
+                    "with another tool in the same turn. Wait for this turn's other tool "
+                    "result(s), then call this handoff by itself, alone, on a later turn."
+                ),
+                name=f"transfer_to_{agent_name}",
+                tool_call_id=tool_call_id,
+            )
+            # No goto here — stays on the normal edge back to the calling agent,
+            # and every sibling tool_call in this batch still gets its own response.
+            return Command(update={"messages": [tool_message]})
+
         handoff_count = state.get("handoff_count", 0)
 
         if handoff_count >= MAX_HANDOFFS_PER_TURN:
