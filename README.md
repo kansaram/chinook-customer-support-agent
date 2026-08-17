@@ -9,35 +9,35 @@ user preferences — that can hand requests off to each other mid-conversation.
 
 ```mermaid
 flowchart LR
-    U[Customer / Browser] --> G[Gradio UI - app.py]
-    G --> BG[Compiled LangGraph - build_graph]
-    BG --> S[supervisor_node - routing and handoff]
+    U["Customer / Browser"] --> G["Gradio UI (app.py)"]
+    G --> BG["Compiled LangGraph (build_graph)"]
+    BG --> S["supervisor_node: routing and handoff"]
 
-    S -->|invoice/account intent| IA[invoice_agent - billing and customer identity]
-    S -->|catalog intent| CA[catalog_agent - tracks, artists, albums]
-    S -->|preference intent| MA[memory_agent - saved preferences]
-    S -->|off-topic| OUT[Final response - direct decline, no agent called]
+    S -->|invoice/account intent| IA["invoice_agent: billing and customer identity"]
+    S -->|catalog intent| CA["catalog_agent: tracks, artists, albums"]
+    S -->|preference intent| MA["memory_agent: saved preferences"]
+    S -->|off-topic| OUT["Final response (direct decline, no agent called)"]
 
-    IA --> IT[ToolNode - invoice and customer tools]
-    CA --> CT[ToolNode - catalog and recommendation tools]
-    MA --> MT[ToolNode - preference tools]
+    IA --> IT["ToolNode: invoice and customer tools"]
+    CA --> CT["ToolNode: catalog and recommendation tools"]
+    MA --> MT["ToolNode: preference tools"]
 
-    IT --> DB1[(Chinook SQLite DB)]
+    IT --> DB1[("Chinook SQLite DB")]
     CT --> DB1
-    MT --> DB2[(customer_memory.db)]
+    MT --> DB2[("customer_memory.db")]
 
-    IA --> H1[transfer_to_catalog_agent]
-    IA --> H2[transfer_to_memory_agent]
-    CA --> H3[transfer_to_invoice_agent]
-    CA --> H4[transfer_to_memory_agent]
-    MA --> H5[transfer_to_invoice_agent]
-    MA --> H6[transfer_to_catalog_agent]
+    IA --> H1["transfer_to_catalog_agent"]
+    IA --> H2["transfer_to_memory_agent"]
+    CA --> H3["transfer_to_invoice_agent"]
+    CA --> H4["transfer_to_memory_agent"]
+    MA --> H5["transfer_to_invoice_agent"]
+    MA --> H6["transfer_to_catalog_agent"]
 
     IA --> OUT
     CA --> OUT
     MA --> OUT
 
-    S -. runs in parallel alongside the primary agent, every turn .-> MA
+    S -. "runs alongside the primary agent every turn" .-> MA
 ```
 
 Each agent can hand a request to either of the other two mid-conversation — not
@@ -60,16 +60,16 @@ sequenceDiagram
     participant DB as SQLite Stores
 
     User->>UI: Ask a support question
-    UI->>Graph: invoke(state with messages and thread_id)
+    UI->>Graph: invoke state with messages and thread_id
     Graph->>Sup: supervisor_node(state)
     Sup->>Sup: classify intent and route request
 
     alt Invoice or account request
-        Sup->>Prim: next_agent = invoice_agent
+        Sup->>Prim: next_agent equals invoice_agent
     else Catalog request
-        Sup->>Prim: next_agent = catalog_agent
+        Sup->>Prim: next_agent equals catalog_agent
     else Preference request
-        Sup->>Prim: next_agent = memory_agent
+        Sup->>Prim: next_agent equals memory_agent
     else Off-topic request
         Sup-->>UI: decline directly, no agent invoked
     end
@@ -79,9 +79,9 @@ sequenceDiagram
         ToolNode->>DB: query Chinook or memory DB
         DB-->>ToolNode: structured query results
         ToolNode-->>Prim: tool results
-        Prim-->>Graph: response_parts and final answer
+        Prim-->>Graph: response parts and final answer
     and Background preference sync
-        Sup->>Mem: run memory_agent in parallel (unless already primary)
+        Sup->>Mem: run memory_agent in parallel unless already primary
         Mem->>ToolNode: save or fetch preferences
         ToolNode->>DB: read or update customer_memory.db
         DB-->>ToolNode: preference state
