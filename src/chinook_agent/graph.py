@@ -33,7 +33,30 @@ from .tools.handoff_tools import (
     transfer_to_catalog_agent,
     transfer_to_memory_agent,
 )
+from langchain_core.messages import ToolMessage
 
+def _route_after_tools(agent_name: str):
+    """Build a conditional-edge function for the given agent's tools node.
+
+    If the last tool message was a SUCCESSFUL handoff (transfer_to_X whose
+    Command already redirected execution via goto), don't also fall back to
+    the static edge — that would re-invoke this agent unnecessarily on top
+    of the handoff that already happened. Only take the static edge back to
+    the calling agent for normal (non-handoff, or refused-handoff) tool calls.
+    """
+    def route(state: AgentState) -> str:
+        last_message = state["messages"][-1]
+        is_handoff_tool = (
+            isinstance(last_message, ToolMessage)
+            and last_message.name
+            and last_message.name.startswith("transfer_to_")
+        )
+        handoff_succeeded = is_handoff_tool and last_message.content.startswith("Handing this off to")
+        if handoff_succeeded:
+            return END  # Command(goto=...) already routed elsewhere — don't also loop back
+        return agent_name
+
+    return route
 
 def route_after_supervisor(state: AgentState) -> list[str]:
     """Fan out to the primary agent AND memory_agent in parallel, unless memory_agent
@@ -67,9 +90,27 @@ def build_graph() -> StateGraph:
             transfer_to_catalog_agent,
             transfer_to_memory_agent,
         ]),
+        destinations=("catalog_agent", "memory_agent"),
+    )
+    graph.add_conditional_edges(
+    "invoice_tools",
+    _route_after_tools("invoice_agent"),
+    {"invoice_agent": "invoice_agent", END: END},
+    )
+
+    graph.add_conditional_edges(
+        "catalog_tools",
+        _route_after_tools("catalog_agent"),
+        {"catalog_agent": "catalog_agent", END: END},
+    )
+
+    graph.add_conditional_edges(
+        "memory_tools",
+        _route_after_tools("memory_agent"),
+        {"memory_agent": "memory_agent", END: END},
     )
     graph.add_conditional_edges("invoice_agent", tools_condition, {"tools": "invoice_tools", END: END})
-    graph.add_edge("invoice_tools", "invoice_agent")
+    
 
     graph.add_node("catalog_agent", catalog_llm_node)
     graph.add_node(
@@ -87,9 +128,10 @@ def build_graph() -> StateGraph:
             transfer_to_invoice_agent,
             transfer_to_memory_agent,
         ]),
+        destinations=("invoice_agent", "memory_agent"),
     )
     graph.add_conditional_edges("catalog_agent", tools_condition, {"tools": "catalog_tools", END: END})
-    graph.add_edge("catalog_tools", "catalog_agent")
+    
 
     graph.add_node("memory_agent", memory_llm_node)
     graph.add_node(
@@ -100,9 +142,10 @@ def build_graph() -> StateGraph:
             transfer_to_invoice_agent,
             transfer_to_catalog_agent,
         ]),
+        destinations=("invoice_agent", "catalog_agent"),
     )
     graph.add_conditional_edges("memory_agent", tools_condition, {"tools": "memory_tools", END: END})
-    graph.add_edge("memory_tools", "memory_agent")
+    
 
     graph.add_conditional_edges(
     "supervisor",

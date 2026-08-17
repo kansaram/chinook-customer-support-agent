@@ -4,7 +4,9 @@ FROM python:3.12-slim
 # Set environment variables
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
-    DEBIAN_FRONTEND=noninteractive
+    DEBIAN_FRONTEND=noninteractive \
+    GRADIO_SERVER_NAME=0.0.0.0 \
+    GRADIO_SERVER_PORT=7860
 
 # Set working directory
 WORKDIR /app
@@ -26,6 +28,9 @@ RUN pip install --no-cache-dir --upgrade pip && \
 # Copy application source code
 COPY . .
 
+# Install the project package in editable mode after the source tree exists
+RUN pip install --no-cache-dir -e .
+
 # Create data directory and build/cache the Chinook SQLite database
 RUN mkdir -p /app/data && \
     if [ ! -f /app/data/chinook.db ]; then \
@@ -40,8 +45,8 @@ RUN mkdir -p /app/data && \
 # Gradio default port is usually 7860
 EXPOSE 7860
 
-# Command to launch your Gradio app via standard Python
-CMD ["python", "src/chinook_agent/app.py"]
+# Command to launch your Gradio app as an installed package module
+CMD ["python", "-m", "chinook_agent.app"]
 
 # To build the Docker image, run the following command in the terminal:
 #docker build -t chinook-customer-support-agent .

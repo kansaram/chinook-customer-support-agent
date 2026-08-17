@@ -197,8 +197,44 @@ def find_artist_id_by_name(artist_name: str, threshold: int = 60) -> Optional[di
         return None
 
     matched_name, score, _ = match
+
+    # Guard against WRatio's partial-ratio fallback matching a short
+    # candidate against a substring of a much longer query (e.g. "Kiss"
+    # matching inside "kishor kumar"). Require a high score when the
+    # two strings differ a lot in length.
+    len_ratio = min(len(matched_name), len(artist_name)) / max(len(matched_name), len(artist_name))
+    if len_ratio < 0.5 and score < 90:
+        return None
+
     return {"artist_id": names[matched_name], "matched_name": matched_name, "score": score}
 
+
+def find_genre_id_by_name(genre_name: str, threshold: int = 60) -> Optional[dict]:
+    """Fuzzy-match a genre name to the closest Genre record. Returns None if no good match."""
+    conn = get_connection()
+    try:
+        rows = conn.execute("SELECT GenreId, Name FROM Genre WHERE Name IS NOT NULL").fetchall()
+    finally:
+        conn.close()
+
+    names = {row["Name"]: row["GenreId"] for row in rows}
+    if not names:
+        return None
+
+    match = process.extractOne(genre_name, names.keys(), scorer=fuzz.WRatio)
+    if match is None or match[1] < threshold:
+        return None
+
+    matched_name, score, _ = match
+
+    # Same guard as find_artist_id_by_name: prevents a short real genre
+    # name (e.g. "Pop") from matching a much longer, unrelated query
+    # (e.g. "Zzzqplorp-fusion") off a coincidental substring overlap.
+    len_ratio = min(len(matched_name), len(genre_name)) / max(len(matched_name), len(genre_name))
+    if len_ratio < 0.5 and score < 90:
+        return None
+
+    return {"genre_id": names[matched_name], "matched_name": matched_name, "score": score}
 
 def get_albums_for_artist(artist_id: int) -> list[dict]:
     """Return a list of albums for the given artist ID."""
@@ -244,26 +280,6 @@ def search_tracks_by_artist(artist_id: int, sample_size: int = 10) -> dict:
         return {"total": total, "sample": sample}
     finally:
         conn.close()
-
-
-def find_genre_id_by_name(genre_name: str, threshold: int = 60) -> Optional[dict]:
-    """Fuzzy-match a genre name to the closest Genre record. Returns None if no good match."""
-    conn = get_connection()
-    try:
-        rows = conn.execute("SELECT GenreId, Name FROM Genre WHERE Name IS NOT NULL").fetchall()
-    finally:
-        conn.close()
-
-    names = {row["Name"]: row["GenreId"] for row in rows}
-    if not names:
-        return None
-
-    match = process.extractOne(genre_name, names.keys(), scorer=fuzz.WRatio)
-    if match is None or match[1] < threshold:
-        return None
-
-    matched_name, score, _ = match
-    return {"genre_id": names[matched_name], "matched_name": matched_name, "score": score}
 
 
 def browse_songs_by_genre(genre_name: str, sample_size: int = 12, per_artist_cap: int = 2) -> Optional[dict]:
