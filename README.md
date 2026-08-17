@@ -1,77 +1,92 @@
 # Chinook Customer Support Agent
 
-## Agent Architecture Diagram
+A multi-agent customer support assistant for a digital music store built on top of the Chinook database. The application uses a Gradio chat interface, a LangGraph supervisor, and specialist agents for invoices, catalog lookup, and saved user preferences.
+
+## System Architecture Diagram
 
 ```mermaid
-flowchart TD
-	U[User] --> APP[Gradio App]
-	APP --> S[supervisor]
+flowchart LR
+    U[Customer / Browser] --> G[Gradio UI<br/>src/chinook_agent/app.py]
+    G --> BG[Compiled LangGraph<br/>build_graph() in src/chinook_agent/graph.py]
+    BG --> S[supervisor_node<br/>intent routing + handoff control]
 
-	S -->|primary route| IA[invoice_agent]
-	S -->|primary route| CA[catalog_agent]
-	S -->|primary route| MA[memory_agent]
+    S --> IA[invoice_agent<br/>billing, invoices, customer identity]
+    S --> CA[catalog_agent<br/>artists, albums, tracks, recommendations]
+    S --> MA[memory_agent<br/>preferences + user memory]
 
-	S -. if primary != memory_agent,<br/>run in parallel .-> MA
+    IA --> IT[ToolNode<br/>customer_lookup + invoice queries]
+    CA --> CT[ToolNode<br/>catalog search + recommendations]
+    MA --> MT[ToolNode<br/>save/get preferences + handoff tools]
 
-	IA <--> IT[invoice_tools]
-	CA <--> CT[catalog_tools]
-	MA <--> MT[memory_tools]
+    IT --> DB1[(Chinook SQLite DB<br/>Customer / Invoice / Track tables)]
+    CT --> DB1
+    MT --> DB2[(Memory SQLite DB<br/>customer_memory.db)]
 
-	IA --> END((END))
-	CA --> END
-	MA --> END
+    IA --> H1[transfer_to_catalog_agent<br/>transfer_to_memory_agent]
+    CA --> H2[transfer_to_invoice_agent<br/>transfer_to_memory_agent]
+    MA --> H3[transfer_to_invoice_agent<br/>transfer_to_catalog_agent]
 
-	CT -. handoff .-> IA
-	IT -. handoff .-> CA
-	MT -. handoff .-> IA
-	MT -. handoff .-> CA
+    IA --> OUT[Final response in chat]
+    CA --> OUT
+    MA --> OUT
+
+    S -. parallel memory sync .-> MA
 ```
-
-Image version: [docs/agent-architecture-diagram.svg](docs/agent-architecture-diagram.svg)
 
 ## Request Execution Diagram
 
 ```mermaid
 sequenceDiagram
-	participant User
-	participant App as Gradio App
-	participant Sup as supervisor
-	participant Prim as Primary Agent
-	participant Mem as memory_agent
-	participant Tools as ToolNode
+    participant User
+    participant UI as Gradio App
+    participant Graph as StateGraph
+    participant Sup as supervisor
+    participant Prim as Primary Agent
+    participant Mem as memory_agent
+    participant ToolNode
+    participant DB as SQLite Stores
 
-	User->>App: Send message
-	App->>Sup: invoke(state)
-	Sup->>Sup: Structured routing decision
+    User->>UI: Ask a support question
+    UI->>Graph: invoke(state with messages + thread_id)
+    Graph->>Sup: supervisor_node(state)
+    Sup->>Sup: classify intent and route request
 
-	alt next_agent == memory_agent
-		Sup->>Mem: Run as primary
-		loop Until no tool calls
-			Mem->>Tools: optional tool call
-			Tools-->>Mem: tool result
-		end
-		Mem-->>App: response
-	else next_agent == invoice_agent or catalog_agent
-		par Primary execution
-			Sup->>Prim: Run selected primary agent
-			loop Until no tool calls
-				Prim->>Tools: optional tool call
-				Tools-->>Prim: tool result
-			end
-			Prim-->>App: primary response
-		and Background sync
-			Sup->>Mem: Run in parallel
-			loop optional memory tool calls
-				Mem->>Tools: save/get preferences
-				Tools-->>Mem: tool result
-			end
-		end
-	end
+    alt Invoice-related request
+        Sup->>Prim: next_agent = invoice_agent
+    else Catalog-related request
+        Sup->>Prim: next_agent = catalog_agent
+    else Preference request
+        Sup->>Prim: next_agent = memory_agent
+    end
 
-	App-->>User: Final response
+    par Primary agent processing
+        Prim->>ToolNode: execute relevant tools
+        ToolNode->>DB: query Chinook DB / memory DB
+        DB-->>ToolNode: structured customer, invoice, or catalog data
+        ToolNode-->>Prim: tool results
+        Prim-->>Graph: response_parts + final answer
+    and Background preference sync
+        Sup->>Mem: run memory_agent in parallel when needed
+        Mem->>ToolNode: save/get preferences
+        ToolNode->>DB: read or update customer_memory.db
+        DB-->>ToolNode: preference state
+        ToolNode-->>Mem: updated memory result
+    end
+
+    Graph-->>UI: final conversation state
+    UI-->>User: render assistant response
 ```
 
-Image version: [docs/request-execution-flow.svg](docs/request-execution-flow.svg)
+## Design Summary
+
+The system follows a single-entry graph design:
+
+- The Gradio app starts the compiled LangGraph graph and exposes the chat UI.
+- The supervisor decides which specialist should handle the current turn.
+- The selected specialist agent may call database-backed tools.
+- A handoff mechanism allows agents to transfer responsibility to another specialist when needed.
+- The memory agent also runs in parallel for preference-related context, ensuring saved user preferences are available while the main agent answers the request.
+- The state object tracks the conversation history, preferred next agent, response fragments, and persisted memory data across turns.
 
 ## Quick Start
 
@@ -116,6 +131,9 @@ cp .env.example .env
 
 Add your `OPENAI_API_KEY` to `.env`.
 
+## SQL script from GitHub: 
+https://github.com/lerocha/chinook-database/blob/master/ChinookDatabase/DataSources/Chinook_Sqlite.sql
+
 ## Run The App
 
 From the project root:
@@ -124,7 +142,7 @@ From the project root:
 python src/chinook_agent/app.py
 ```
 
-Default URL: `http://127.0.0.1:7860`
+Default URL: `http://localhost:7860`
 
 Optional server overrides:
 
@@ -158,9 +176,13 @@ python -c "import sqlite3; c = sqlite3.connect('data/chinook.db'); print(c.execu
 ```bash
 pytest tests/ -v
 ```
+To run with pytest
+
+pip install pytest
+python -m pytest tests/ -v
 
 ## Docker
-
+Run the project using Docker
 Build image:
 
 ```bash
@@ -174,5 +196,12 @@ docker run -d -p 7860:7860 --name chinook-customer-support-agent --env-file .env
 ```
 
 Open: `http://localhost:7860`
+
+## Run the Application on local
+
+change in app.py
+server_name = os.getenv("GRADIO_SERVER_NAME", "127.0.0.1")
+cd .\src\chinook_agent\
+python app.py
 
 
