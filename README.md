@@ -6,27 +6,28 @@ A multi-agent customer support assistant for a digital music store built on top 
 
 ```mermaid
 flowchart LR
-    U[Customer / Browser] --> G[Gradio UI<br/>src/chinook_agent/app.py]
-    G --> BG[Compiled LangGraph<br/>build_graph() in src/chinook_agent/graph.py]
-    BG --> S[supervisor_node<br/>intent routing + handoff control]
+    U[Customer / Browser] --> G[Gradio UI - app.py]
+    G --> BG[Compiled LangGraph - build_graph]
+    BG --> S[supervisor_node - routing and handoff]
 
-    S --> IA[invoice_agent<br/>billing, invoices, customer identity]
-    S --> CA[catalog_agent<br/>artists, albums, tracks, recommendations]
-    S --> MA[memory_agent<br/>preferences + user memory]
+    S --> IA[invoice_agent - billing and customer identity]
+    S --> CA[catalog_agent - tracks, artists, albums]
+    S --> MA[memory_agent - saved preferences]
 
-    IA --> IT[ToolNode<br/>customer_lookup + invoice queries]
-    CA --> CT[ToolNode<br/>catalog search + recommendations]
-    MA --> MT[ToolNode<br/>save/get preferences + handoff tools]
+    IA --> IT[ToolNode - invoice and customer tools]
+    CA --> CT[ToolNode - catalog and recommendation tools]
+    MA --> MT[ToolNode - preference tools and handoff]
 
-    IT --> DB1[(Chinook SQLite DB<br/>Customer / Invoice / Track tables)]
+    IT --> DB1[(Chinook SQLite DB)]
     CT --> DB1
-    MT --> DB2[(Memory SQLite DB<br/>customer_memory.db)]
+    MT --> DB2[(customer_memory.db)]
 
-    IA --> H1[transfer_to_catalog_agent<br/>transfer_to_memory_agent]
-    CA --> H2[transfer_to_invoice_agent<br/>transfer_to_memory_agent]
-    MA --> H3[transfer_to_invoice_agent<br/>transfer_to_catalog_agent]
+    IA --> H1[transfer_to_catalog_agent]
+    CA --> H2[transfer_to_invoice_agent]
+    MA --> H3[transfer_to_invoice_agent]
+    MA --> H4[transfer_to_catalog_agent]
 
-    IA --> OUT[Final response in chat]
+    IA --> OUT[Final response]
     CA --> OUT
     MA --> OUT
 
@@ -47,7 +48,7 @@ sequenceDiagram
     participant DB as SQLite Stores
 
     User->>UI: Ask a support question
-    UI->>Graph: invoke(state with messages + thread_id)
+    UI->>Graph: invoke(state with messages and thread_id)
     Graph->>Sup: supervisor_node(state)
     Sup->>Sup: classify intent and route request
 
@@ -61,13 +62,13 @@ sequenceDiagram
 
     par Primary agent processing
         Prim->>ToolNode: execute relevant tools
-        ToolNode->>DB: query Chinook DB / memory DB
-        DB-->>ToolNode: structured customer, invoice, or catalog data
+        ToolNode->>DB: query Chinook or memory DB
+        DB-->>ToolNode: structured query results
         ToolNode-->>Prim: tool results
-        Prim-->>Graph: response_parts + final answer
+        Prim-->>Graph: response_parts and final answer
     and Background preference sync
         Sup->>Mem: run memory_agent in parallel when needed
-        Mem->>ToolNode: save/get preferences
+        Mem->>ToolNode: save or fetch preferences
         ToolNode->>DB: read or update customer_memory.db
         DB-->>ToolNode: preference state
         ToolNode-->>Mem: updated memory result
