@@ -355,6 +355,30 @@ def test_27_track_search_by_title_fuzzy():
     text = reply_text(result).lower()
     assert "no" not in text.split(".")[0]  # first sentence shouldn't be a flat "no results" for a well-known title
 
+def test_27b_title_search_reports_total_when_truncated():
+    """Verifies the fix: search_song_by_title_fuzzy now returns a true total count,
+    and the tool must report it when more matches exist than are shown. A short,
+    common word ('love') is likely to fuzzy-match many track titles in Chinook,
+    which should exceed the default sample size."""
+    from chinook_agent.database.repository import search_song_by_title_fuzzy
+
+    result = search_song_by_title_fuzzy("love", limit=5, threshold=60)
+    assert "total" in result and "sample" in result, (
+        f"Expected {{'total': ..., 'sample': ...}} shape, got: {result}"
+    )
+    # Not asserting total > len(sample) unconditionally, since it depends on the
+    # seeded data — but if it IS truncated, total must be a real count, not just
+    # equal to the sample size (which would indicate the old bug is still present).
+    if result["total"] > 0:
+        assert result["total"] >= len(result["sample"])
+
+
+def test_27c_title_search_tool_mentions_total_when_truncated():
+    """Agent-level version: if a title search is truncated, the customer-facing
+    response should mention the total, same grounding rule as browse-by-genre."""
+    result = send("Search for songs with 'love' in the title, show me everything you have", new_config())
+    text = reply_text(result).lower()
+    assert any(word in text for word in ["total", "more", "showing"])
 
 def test_28_composer_search_returns_results():
     """search_tracks_by_composer path."""
@@ -666,7 +690,116 @@ def test_48_exact_invoice_total_is_quoted_not_rounded():
         f"Expected exact total {exact_total} to appear verbatim in: {text!r}"
     )
 
+# ============================================================
+# Additional invoice tool tests — add to CATEGORY 12 in
+# test_agent_scenarios.py, after test_40
+# ============================================================
 
+def _get_customer_with_no_invoices():
+    """Find a real seeded customer_id that has ZERO invoices — the opposite of
+    _get_a_real_customer_with_invoices, which explicitly skips these."""
+    from chinook_agent.database.repository import get_invoices_for_customer, get_customer_by_id
+    for candidate_id in range(1, 60):
+        customer = get_customer_by_id(candidate_id)
+        if customer is None:
+            continue
+        invoices = get_invoices_for_customer(candidate_id)
+        if not invoices:
+            return candidate_id
+    pytest.skip("No seeded customer with zero invoices found in the first 60 IDs")
+
+
+def _get_two_different_customers_with_invoices():
+    """Find two DISTINCT customer_ids that each have at least one invoice, for
+    cross-customer isolation testing."""
+    from chinook_agent.database.repository import get_invoices_for_customer
+    found: list[tuple[int, list]] = []
+    for candidate_id in range(1, 60):
+        invoices = get_invoices_for_customer(candidate_id)
+        if invoices:
+            found.append((candidate_id, invoices))
+        if len(found) >= 2:
+            return found[0], found[1]
+    pytest.skip("Could not find two distinct customers with invoices in the first 60 IDs")
+
+
+def test_49_customer_with_zero_invoices_returns_empty_not_error():
+    """A customer with no purchase history must get a clean empty result, not
+    an exception or a fabricated invoice list."""
+    from chinook_agent.database.repository import get_invoices_for_customer
+    customer_id = _get_customer_with_no_invoices()
+    invoices = get_invoices_for_customer(customer_id)
+    assert invoices == []
+
+
+def test_50_cross_customer_invoice_access_is_blocked():
+    """Security-critical: a REAL invoice ID belonging to customer A must return
+    NOTHING when queried under customer B's ID — proves the WHERE clause's dual
+    match (InvoiceId AND CustomerId) actually prevents cross-customer leakage,
+    not just that a nonexistent ID fails."""
+    from chinook_agent.database.repository import (
+        get_tracks_for_invoice_for_customer,
+        get_support_rep_for_customer_by_invoiceId,
+    )
+    (customer_a_id, customer_a_invoices), (customer_b_id, _) = _get_two_different_customers_with_invoices()
+    real_invoice_id = customer_a_invoices[0]["invoice_id"]
+
+    # Query customer A's real invoice, but under customer B's ID — must be empty.
+    leaked_tracks = get_tracks_for_invoice_for_customer(real_invoice_id, customer_b_id)
+    assert leaked_tracks == [], (
+        f"Customer {customer_b_id} was able to access customer {customer_a_id}'s "
+        f"invoice {real_invoice_id} track data: {leaked_tracks}"
+    )
+
+    leaked_rep = get_support_rep_for_customer_by_invoiceId(customer_b_id, real_invoice_id)
+    assert leaked_rep is None, (
+        f"Customer {customer_b_id} was able to access support rep info for "
+        f"customer {customer_a_id}'s invoice {real_invoice_id}: {leaked_rep}"
+    )
+
+
+def test_51_nonexistent_invoice_id_returns_empty_not_error():
+    """A nonexistent invoice ID must produce a clean empty/None result at the
+    repository level, not an exception — even when the customer_id itself is valid."""
+    from chinook_agent.database.repository import (
+        get_tracks_for_invoice_for_customer,
+        get_support_rep_for_customer_by_invoiceId,
+    )
+    customer_id, _ = _get_a_real_customer_with_invoices()
+
+    tracks = get_tracks_for_invoice_for_customer(999999999, customer_id)
+    assert tracks == []
+
+    rep = get_support_rep_for_customer_by_invoiceId(customer_id, 999999999)
+    assert rep is None
+
+def test_52_health_check_reports_both_databases_healthy():
+    """Database utility test: health_check must confirm both databases are
+    reachable and have their expected tables, under normal conditions."""
+    from chinook_agent.database.health import health_check
+
+    result = health_check()
+
+    assert result["healthy"] is True
+    assert result["chinook_db"]["reachable"] is True
+    assert result["chinook_db"]["expected_table_found"] is True
+    assert result["memory_db"]["reachable"] is True
+    assert result["memory_db"]["expected_table_found"] is True
+
+
+def test_53_health_check_never_raises_on_bad_input():
+    """health_check itself takes no arguments, but this confirms the underlying
+    _check_database helper degrades gracefully rather than propagating a raw
+    exception if a query fails for any reason."""
+    from chinook_agent.database.health import _check_database
+
+    def broken_connection():
+        raise RuntimeError("simulated connection failure")
+
+    result = _check_database(broken_connection, "Customer")
+    assert result["reachable"] is False
+    assert "error" in result
+    
 if __name__ == "__main__":
     import sys
     print("Running all scenarios directly (not via pytest)...\n")

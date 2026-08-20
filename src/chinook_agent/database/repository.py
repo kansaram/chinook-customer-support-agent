@@ -184,7 +184,10 @@ def find_artist_id_by_name(artist_name: str, threshold: int = 60) -> Optional[di
     """Fuzzy-match an artist name to the closest Artist record. Returns None if no good match."""
     conn = get_connection()
     try:
-        rows = conn.execute("SELECT ArtistId, Name FROM Artist").fetchall()
+        # ORDER BY ArtistId makes row order — and therefore fuzzy-match
+        # tie-breaking — deterministic by design, rather than relying on
+        # SQLite's unspecified default scan order for an unordered query.
+        rows = conn.execute("SELECT ArtistId, Name FROM Artist ORDER BY ArtistId").fetchall()
     finally:
         conn.close()
 
@@ -213,7 +216,9 @@ def find_genre_id_by_name(genre_name: str, threshold: int = 60) -> Optional[dict
     """Fuzzy-match a genre name to the closest Genre record. Returns None if no good match."""
     conn = get_connection()
     try:
-        rows = conn.execute("SELECT GenreId, Name FROM Genre WHERE Name IS NOT NULL").fetchall()
+        rows = conn.execute(
+            "SELECT GenreId, Name FROM Genre WHERE Name IS NOT NULL ORDER BY GenreId"
+        ).fetchall()
     finally:
         conn.close()
 
@@ -360,10 +365,13 @@ def browse_songs_by_genre(genre_name: str, sample_size: int = 12, per_artist_cap
         conn.close()
 
 
-def search_song_by_title_fuzzy(song_title: str, limit: int = 10, threshold: int = 60) -> list[dict]:
-    """Fuzzy-search tracks by title and return detailed matches with artist and album."""
+
+def search_song_by_title_fuzzy(song_title: str, limit: int = 10, threshold: int = 60) -> dict:
+    """Fuzzy-search tracks by title. Returns total qualifying match count (not just
+    the returned sample) plus detailed matches with artist and album, so callers
+    can honestly report truncation instead of implying the sample is everything."""
     if not song_title.strip() or limit <= 0:
-        return []
+        return {"total": 0, "sample": []}
 
     conn = get_connection()
     try:
@@ -377,22 +385,26 @@ def search_song_by_title_fuzzy(song_title: str, limit: int = 10, threshold: int 
         conn.close()
 
     if not rows:
-        return []
+        return {"total": 0, "sample": []}
 
     name_to_rows: dict[str, list[sqlite3.Row]] = {}
     for row in rows:
         name_to_rows.setdefault(row["TrackName"], []).append(row)
 
-    matches = process.extract(
+    # First pass: find ALL qualifying matches (no limit) to get a true total count.
+    all_matches = process.extract(
         song_title,
         name_to_rows.keys(),
         scorer=fuzz.WRatio,
-        limit=limit,
+        limit=None,
         score_cutoff=threshold,
     )
+    total = sum(len(name_to_rows[matched_name]) for matched_name, _, _ in all_matches)
 
+    # Second pass: take only the top `limit` for the actual sample shown.
+    top_matches = all_matches[:limit]
     results: list[dict] = []
-    for matched_name, score, _ in matches:
+    for matched_name, score, _ in top_matches:
         for row in name_to_rows[matched_name]:
             results.append(
                 {
@@ -405,8 +417,7 @@ def search_song_by_title_fuzzy(song_title: str, limit: int = 10, threshold: int 
             )
 
     results.sort(key=lambda item: item["score"], reverse=True)
-    return results[:limit]
-
+    return {"total": total, "sample": results[:limit]}
 
 def search_tracks_by_composer(composer_name: str, sample_size: int = 10, threshold: int = 60) -> dict:
     """Search tracks by composer text and return a total count plus a representative sample."""

@@ -1,3 +1,4 @@
+import json
 import re
 from typing import Optional, Annotated
 from pydantic import BaseModel, Field
@@ -283,9 +284,9 @@ def resolve_identifier(
 # Tool helpers
 # ============================================================
 
-def _tool_message(content: str, tool_call_id: str, **extra_updates) -> Command:
-    """Build a Command that appends a single ToolMessage, plus any extra state updates."""
-    return Command(update={"messages": [ToolMessage(content=content, tool_call_id=tool_call_id)], **extra_updates})
+def _tool_message(payload: dict, tool_call_id: str, **extra_updates) -> Command:
+    """Build a Command whose ToolMessage.content is a JSON string, plus any extra state updates."""
+    return Command(update={"messages": [ToolMessage(content=json.dumps(payload), tool_call_id=tool_call_id)], **extra_updates})
 
 
 # ============================================================
@@ -300,7 +301,7 @@ def save_preference(
 ) -> Command:
     preference_text = input.get("preference")
     if not preference_text:
-        return _tool_message("No preference text provided.", tool_call_id)
+        return _tool_message({"status": "error", "message": "No preference text provided."}, tool_call_id)
 
     identifier = resolve_identifier(
         customer_id=state.get("customer_id"),
@@ -310,12 +311,12 @@ def save_preference(
 
     if identifier is None:
         # Queue it instead of dropping it — will be flushed once an identifier is known.
-        message = (
-            "I can save that once I have your email, phone, or customer ID. "
-            "I've noted the preference for now."
-        )
         normalized_preference = normalize_preference_statement(preference_text)
-        return _tool_message(message, tool_call_id, pending_preferences=[normalized_preference])
+        payload = {
+            "status": "pending",
+            "message": "I can save that once I have your email, phone, or customer ID. I've noted the preference for now.",
+        }
+        return _tool_message(payload, tool_call_id, pending_preferences=[normalized_preference])
 
     existing = load_preferences_list(identifier)
     merged = merge_preference_statements(existing, state.get("preferences", []))
@@ -326,9 +327,17 @@ def save_preference(
 
     current_text = merged[0] if merged else canonicalize_preference_statement(preference_text)
     is_update = "dislike" in current_text.lower() and len(merged) == 1
-    message = f"Updated your preference: {current_text}." if is_update else f"Noted: {current_text}"
+    payload = {
+        "status": "ok",
+        "updated": is_update,
+        "current_preference": current_text,
+        "message": f"Updated your preference: {current_text}." if is_update else f"Noted: {current_text}",
+    }
 
-    return _tool_message(message, tool_call_id, preferences=merged, pending_preferences=[])
+    return _tool_message(payload, tool_call_id, preferences=merged, pending_preferences=[])
+
+
+MAX_GET_PREFERENCES_CALLS_PER_TURN = 2
 
 
 @tool("get_preferences", description="Retrieve the customer's previously saved preferences.")
@@ -338,13 +347,28 @@ def get_preferences(
     state: Annotated[dict, InjectedState],
 ) -> Command:
     """Load stored preferences for this customer from customer_memory.db."""
+    call_count = state.get("get_preferences_call_count", 0)
+
+    # Hard stop: if this tool has already been called this many times in the
+    # SAME turn, refuse and force the LLM to answer from what it already has —
+    # guarantees the loop terminates regardless of why the LLM keeps re-calling
+    # it (ambiguous phrasing, model quirk, etc.), rather than relying on a
+    # prompt instruction alone, which proved unreliable in testing.
+    if call_count >= MAX_GET_PREFERENCES_CALLS_PER_TURN:
+        payload = {
+            "status": "already_fetched",
+            "message": "You already called get_preferences this turn — use that result to answer now instead of calling it again.",
+        }
+        return _tool_message(payload, tool_call_id, get_preferences_call_count=call_count + 1)
+
     identifier = resolve_identifier(
         customer_id=state.get("customer_id"),
         email=state.get("customer_email"),
         phone=state.get("customer_phone"),
     )
     if identifier is None:
-        return _tool_message("I don't have enough information yet to look up saved preferences.", tool_call_id)
+        payload = {"status": "error", "message": "I don't have enough information yet to look up saved preferences."}
+        return _tool_message(payload, tool_call_id, get_preferences_call_count=call_count + 1)
 
     preferences = load_preferences_list(identifier)
     sanitized = merge_preference_statements([], preferences)
@@ -353,11 +377,16 @@ def get_preferences(
         preferences = sanitized
 
     if not preferences:
-        return _tool_message("No saved preferences found for this customer.", tool_call_id)
+        payload = {"status": "not_found", "message": "No saved preferences found for this customer.", "preferences": []}
+        return _tool_message(payload, tool_call_id, get_preferences_call_count=call_count + 1)
 
     bullet_items: list[str] = []
     for preference in preferences:
         bullet_items.extend(part.strip() for part in re.split(r"\s*;\s*|\n+", preference) if part.strip())
 
-    summary = "Saved preferences:\n" + "\n".join(f"- {p}" for p in bullet_items)
-    return _tool_message(summary, tool_call_id, preferences=preferences)
+    payload = {"status": "ok", "preferences": bullet_items}
+    return _tool_message(
+        payload, tool_call_id,
+        preferences=preferences,
+        get_preferences_call_count=call_count + 1,
+    )

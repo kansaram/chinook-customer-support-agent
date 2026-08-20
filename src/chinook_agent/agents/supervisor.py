@@ -43,10 +43,11 @@ _INVOICE_IDENTIFICATION_REQUEST_RE = re.compile(r"\bcustomer\s*id\b", re.IGNOREC
 # in memory_agent.py — kept as a separate copy intentionally (same reasoning as the
 # other duplicated pattern lists: avoids coupling supervisor routing to memory_agent's
 # internals, at the cost of needing to update both if wording changes).
+
 _PREFERENCE_LOOKUP_RE = re.compile(
     r"\b(?:what|which)\s+(?:are\s+)?(?:my|the)\s+(?:saved\s+)?preferences\b"
     r"|\bwhat\s+do\s+you\s+remember\b"
-    r"|\b(?:show|tell|give|send)\s+me\s+(?:my\s+)?preferences\b",
+    r"|\b(?:show|tell|give|send)\s+me\s+(?:my\s+|more\s+)?preferences\b",  # "more" added
     re.IGNORECASE,
 )
 
@@ -90,13 +91,23 @@ def supervisor_node(state: AgentState) -> dict:
     # otherwise pull the router toward invoice_agent.
     if latest_user_text and _wants_saved_preferences(latest_user_text):
         logger.info("supervisor routed preference-lookup override", extra={"next_agent": "memory_agent"})
-        return {"next_agent": "memory_agent", "handoff_count": 0, "response_parts": []}
+        return {
+            "next_agent": "memory_agent",
+            "handoff_count": 0,
+            "response_parts": [],
+            "get_preferences_call_count": 0,
+        }
 
     # Fast path: invoice_agent already asked for an identifier — keep it with
     # invoice_agent regardless of what the reply looks like. No LLM call needed.
     if _invoice_agent_awaiting_identifier(state):
         logger.info("supervisor routed continuation of invoice identification", extra={"next_agent": "invoice_agent"})
-        return {"next_agent": "invoice_agent", "handoff_count": 0, "response_parts": []}
+        return {
+            "next_agent": "invoice_agent",
+            "handoff_count": 0,
+            "response_parts": [],
+            "get_preferences_call_count": 0,
+        }
 
     messages = [SystemMessage(content=SUPERVISOR_PROMPT)] + sanitize_message_history(state["messages"])
 
@@ -115,6 +126,12 @@ def supervisor_node(state: AgentState) -> dict:
             "response": OFF_TOPIC_DECLINE_MESSAGE,
             "handoff_count": 0,
             "response_parts": [],
+            "get_preferences_call_count": 0,
         }
 
-    return {"next_agent": agent_name, "handoff_count": 0, "response_parts": []}
+    return {
+        "next_agent": agent_name,
+        "handoff_count": 0,
+        "response_parts": [],
+        "get_preferences_call_count": 0,
+    }

@@ -41,7 +41,7 @@ PREFERENCE_LOOKUP_PATTERNS = [
     re.compile(r"\b(?:what|which)\s+(?:are\s+)?(?:my|the)\s+(?:saved\s+)?preferences\b", re.IGNORECASE),
     re.compile(r"\b(?:what\s+do\s+you\s+remember|what\s+preferences\s+do\s+you\s+remember)\b", re.IGNORECASE),
     re.compile(r"\b(?:show|tell)\s+me\s+(?:my\s+)?preferences\b", re.IGNORECASE),
-    re.compile(r"\b(?:give|send)\s+me\s+(?:my\s+)?preferences\b", re.IGNORECASE),
+    re.compile(r"\b(?:give|send)\s+me\s+(?:my\s+|more\s+)?preferences\b", re.IGNORECASE),  # "more" added
 ]
 
 # NOTE: intentionally narrower/differently-anchored than preference_tools' patterns

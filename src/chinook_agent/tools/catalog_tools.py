@@ -1,3 +1,4 @@
+import json
 import re
 from typing import Annotated
 from pydantic import BaseModel, Field
@@ -22,6 +23,11 @@ class AlbumsByArtistInput(BaseModel):
     artist_name: str = Field(description="The artist's name, even if potentially misspelled")
 
 
+def _tool_message(payload: dict, tool_call_id: str, **extra_updates) -> Command:
+    """Build a Command whose ToolMessage.content is a JSON string."""
+    return Command(update={"messages": [ToolMessage(content=json.dumps(payload), tool_call_id=tool_call_id)], **extra_updates})
+
+
 @tool("get_albums_for_artist", description="Find albums by an artist name, using fuzzy matching to tolerate typos.")
 def get_albums_for_artist_tool(
     input: AlbumsByArtistInput,
@@ -30,20 +36,28 @@ def get_albums_for_artist_tool(
     match = find_artist_id_by_name(input.artist_name)
 
     if match is None:
-        message = f"No artist found matching '{input.artist_name}'."
-        return Command(update={"messages": [ToolMessage(content=message, tool_call_id=tool_call_id)]})
+        payload = {"status": "not_found", "message": f"No artist found matching '{input.artist_name}'."}
+        return _tool_message(payload, tool_call_id)
 
     albums = get_albums_for_artist(match["artist_id"])
 
     if not albums:
-        message = f"Found artist '{match['matched_name']}' but no albums are listed for them."
-        return Command(update={"messages": [ToolMessage(content=message, tool_call_id=tool_call_id)]})
+        payload = {
+            "status": "not_found",
+            "message": f"Found artist '{match['matched_name']}' but no albums are listed for them.",
+            "artist_name": match["matched_name"],
+        }
+        return _tool_message(payload, tool_call_id)
 
-    note = f" (matched from '{input.artist_name}')" if match["matched_name"].lower() != input.artist_name.lower() else ""
-    album_list = "\n".join(f"- {a['title']}" for a in albums)
-    summary = f"Albums by {match['matched_name']}{note}:\n{album_list}"
+    matched_from = input.artist_name if match["matched_name"].lower() != input.artist_name.lower() else None
+    payload = {
+        "status": "ok",
+        "artist_name": match["matched_name"],
+        "matched_from": matched_from,
+        "albums": [{"title": a["title"]} for a in albums],
+    }
+    return _tool_message(payload, tool_call_id)
 
-    return Command(update={"messages": [ToolMessage(content=summary, tool_call_id=tool_call_id)]})
 
 class TracksByArtistInput(BaseModel):
     artist_name: str = Field(description="The artist's name, even if potentially misspelled")
@@ -126,24 +140,29 @@ def search_tracks_by_artist_tool(
     match = find_artist_id_by_name(input.artist_name)
 
     if match is None:
-        message = f"No artist found matching '{input.artist_name}'."
-        return Command(update={"messages": [ToolMessage(content=message, tool_call_id=tool_call_id)]})
+        payload = {"status": "not_found", "message": f"No artist found matching '{input.artist_name}'."}
+        return _tool_message(payload, tool_call_id)
 
     result = search_tracks_by_artist(match["artist_id"])
 
     if result["total"] == 0:
-        message = f"Found artist '{match['matched_name']}' but no tracks are listed for them."
-        return Command(update={"messages": [ToolMessage(content=message, tool_call_id=tool_call_id)]})
+        payload = {
+            "status": "not_found",
+            "message": f"Found artist '{match['matched_name']}' but no tracks are listed for them.",
+            "artist_name": match["matched_name"],
+        }
+        return _tool_message(payload, tool_call_id)
 
-    sample_lines = "\n".join(f"- {t['track_name']} (from {t['album_title']})" for t in result["sample"])
-    truncation_note = (
-        f"\n\n(Showing {len(result['sample'])} of {result['total']} total tracks — more results exist.)"
-        if result["total"] > len(result["sample"])
-        else ""
-    )
-    summary = f"Tracks by {match['matched_name']}:\n{sample_lines}{truncation_note}"
-
-    return Command(update={"messages": [ToolMessage(content=summary, tool_call_id=tool_call_id)]})
+    sample = result["sample"]
+    payload = {
+        "status": "ok",
+        "artist_name": match["matched_name"],
+        "total": result["total"],
+        "showing": len(sample),
+        "more_exist": result["total"] > len(sample),
+        "sample": [{"track_name": t["track_name"], "album_title": t["album_title"]} for t in sample],
+    }
+    return _tool_message(payload, tool_call_id)
 
 
 @tool(
@@ -161,25 +180,31 @@ def browse_songs_by_genre_tool(
     )
 
     if result is None:
-        message = f"No genre found matching '{input.genre_name}'."
-        return Command(update={"messages": [ToolMessage(content=message, tool_call_id=tool_call_id)]})
+        payload = {"status": "not_found", "message": f"No genre found matching '{input.genre_name}'."}
+        return _tool_message(payload, tool_call_id)
 
     if result["total_tracks"] == 0:
-        message = f"Genre '{result['genre_name']}' has no tracks listed."
-        return Command(update={"messages": [ToolMessage(content=message, tool_call_id=tool_call_id)]})
+        payload = {
+            "status": "not_found",
+            "message": f"Genre '{result['genre_name']}' has no tracks listed.",
+            "genre_name": result["genre_name"],
+        }
+        return _tool_message(payload, tool_call_id)
 
-    sample_lines = "\n".join(
-        f"- {t['track_name']} by {t['artist_name']} (from {t['album_title']})" for t in result["sample"]
-    )
-    truncation_note = (
-        f"\n\n(Showing {len(result['sample'])} of {result['total_tracks']} total tracks "
-        f"across {result['total_artists']} artists — more results exist.)"
-        if result["total_tracks"] > len(result["sample"])
-        else f"\n\n(Showing all {len(result['sample'])} tracks across {result['total_artists']} artists.)"
-    )
-    summary = f"Songs in genre {result['genre_name']}:\n{sample_lines}{truncation_note}"
-
-    return Command(update={"messages": [ToolMessage(content=summary, tool_call_id=tool_call_id)]})
+    sample = result["sample"]
+    payload = {
+        "status": "ok",
+        "genre_name": result["genre_name"],
+        "total_tracks": result["total_tracks"],
+        "total_artists": result["total_artists"],
+        "showing": len(sample),
+        "more_exist": result["total_tracks"] > len(sample),
+        "sample": [
+            {"track_name": t["track_name"], "artist_name": t["artist_name"], "album_title": t["album_title"]}
+            for t in sample
+        ],
+    }
+    return _tool_message(payload, tool_call_id)
 
 
 @tool(
@@ -190,26 +215,34 @@ def search_song_by_title_fuzzy_tool(
     input: SongTitleSearchInput,
     tool_call_id: Annotated[str, InjectedToolCallId],
 ) -> Command:
-    matches = search_song_by_title_fuzzy(
+    result = search_song_by_title_fuzzy(
         song_title=input.song_title,
         limit=input.limit,
         threshold=input.threshold,
     )
 
-    if not matches:
-        message = f"No songs found matching '{input.song_title}'."
-        return Command(update={"messages": [ToolMessage(content=message, tool_call_id=tool_call_id)]})
+    if result["total"] == 0:
+        payload = {"status": "not_found", "message": f"No songs found matching '{input.song_title}'."}
+        return _tool_message(payload, tool_call_id)
 
-    lines = "\n".join(
-        f"- {row['track_name']} by {row['artist_name']} (from {row['album_title']}, score: {row['score']:.1f})"
-        for row in matches
-    )
-    summary = (
-        f"Song matches for '{input.song_title}':\n"
-        f"{lines}\n\n"
-        f"(Showing {len(matches)} result{'s' if len(matches) != 1 else ''}.)"
-    )
-    return Command(update={"messages": [ToolMessage(content=summary, tool_call_id=tool_call_id)]})
+    sample = result["sample"]
+    payload = {
+        "status": "ok",
+        "query": input.song_title,
+        "total": result["total"],
+        "showing": len(sample),
+        "more_exist": result["total"] > len(sample),
+        "sample": [
+            {
+                "track_name": row["track_name"],
+                "artist_name": row["artist_name"],
+                "album_title": row["album_title"],
+                "score": row["score"],
+            }
+            for row in sample
+        ],
+    }
+    return _tool_message(payload, tool_call_id)
 
 
 @tool(
@@ -227,20 +260,27 @@ def search_tracks_by_composer_tool(
     )
 
     if result["total"] == 0:
-        message = f"No tracks found for composer '{input.composer_name}'."
-        return Command(update={"messages": [ToolMessage(content=message, tool_call_id=tool_call_id)]})
+        payload = {"status": "not_found", "message": f"No tracks found for composer '{input.composer_name}'."}
+        return _tool_message(payload, tool_call_id)
 
-    sample_lines = "\n".join(
-        f"- {row['track_name']} by {row['composer']} (from {row['album_title']}, score: {row['score']:.1f})"
-        for row in result["sample"]
-    )
-    truncation_note = (
-        f"\n\n(Showing {len(result['sample'])} of {result['total']} total tracks matched to this composer.)"
-        if result["total"] > len(result["sample"])
-        else ""
-    )
-    summary = f"Tracks by composer '{input.composer_name}':\n{sample_lines}{truncation_note}"
-    return Command(update={"messages": [ToolMessage(content=summary, tool_call_id=tool_call_id)]})
+    sample = result["sample"]
+    payload = {
+        "status": "ok",
+        "composer_query": input.composer_name,
+        "total": result["total"],
+        "showing": len(sample),
+        "more_exist": result["total"] > len(sample),
+        "sample": [
+            {
+                "track_name": row["track_name"],
+                "composer": row["composer"],
+                "album_title": row["album_title"],
+                "score": row["score"],
+            }
+            for row in sample
+        ],
+    }
+    return _tool_message(payload, tool_call_id)
 
 
 @tool(
@@ -253,22 +293,25 @@ def get_track_details_by_id_tool(
 ) -> Command:
     details = get_track_details_by_id(input.track_id)
     if details is None:
-        message = f"No track found with ID {input.track_id}."
-        return Command(update={"messages": [ToolMessage(content=message, tool_call_id=tool_call_id)]})
+        payload = {"status": "not_found", "message": f"No track found with ID {input.track_id}."}
+        return _tool_message(payload, tool_call_id)
 
-    summary = (
-        f"Track ID: {details['track_id']}\n"
-        f"Name: {details['track_name']}\n"
-        f"Artist: {details.get('artist_name') or 'N/A'}\n"
-        f"Album: {details.get('album_title') or 'N/A'}\n"
-        f"Genre: {details.get('genre_name') or 'N/A'}\n"
-        f"Media Type: {details.get('media_type_name') or 'N/A'}\n"
-        f"Composer: {details.get('composer') or 'N/A'}\n"
-        f"Duration (ms): {details['milliseconds']}\n"
-        f"Size (bytes): {details.get('bytes') if details.get('bytes') is not None else 'N/A'}\n"
-        f"Unit Price: ${details['unit_price']:.2f}"
-    )
-    return Command(update={"messages": [ToolMessage(content=summary, tool_call_id=tool_call_id)]})
+    payload = {
+        "status": "ok",
+        "track": {
+            "track_id": details["track_id"],
+            "track_name": details["track_name"],
+            "artist_name": details.get("artist_name"),
+            "album_title": details.get("album_title"),
+            "genre_name": details.get("genre_name"),
+            "media_type_name": details.get("media_type_name"),
+            "composer": details.get("composer"),
+            "milliseconds": details["milliseconds"],
+            "bytes": details.get("bytes"),
+            "unit_price": details["unit_price"],
+        },
+    }
+    return _tool_message(payload, tool_call_id)
 
 
 @tool(
@@ -291,13 +334,13 @@ def suggest_catalog_from_preferences_tool(
             preferences = load_preferences_list(identifier)
 
     if not preferences:
-        message = (
-            "No saved preferences are available yet. "
-            "Ask the customer to share a preference, then use save_preference first."
-        )
-        return Command(update={"messages": [ToolMessage(content=message, tool_call_id=tool_call_id)]})
+        payload = {
+            "status": "no_preferences",
+            "message": "No saved preferences are available yet. Ask the customer to share a preference, then use save_preference first.",
+        }
+        return _tool_message(payload, tool_call_id)
 
-    suggestion_blocks: list[str] = []
+    suggestions: list[dict] = []
     used = 0
 
     for preference in preferences:
@@ -311,35 +354,46 @@ def suggest_catalog_from_preferences_tool(
                 per_artist_cap=input.per_artist_cap,
             )
             if genre_result and genre_result["sample"]:
-                lines = "\n".join(
-                    f"  - {row['track_name']} by {row['artist_name']}"
+                tracks = [
+                    {"track_name": row["track_name"], "artist_name": row["artist_name"]}
                     for row in genre_result["sample"][: input.sample_size]
-                )
-                suggestion_blocks.append(
-                    f"Based on preference '{preference}' (matched genre: {genre_result['genre_name']}):\n{lines}"
+                ]
+                suggestions.append(
+                    {
+                        "preference": preference,
+                        "matched_genre": genre_result["genre_name"],
+                        "matched_artist": None,
+                        "tracks": tracks,
+                    }
                 )
                 used += 1
                 break
 
             artist_match = find_artist_id_by_name(candidate)
             if artist_match:
-                tracks = search_tracks_by_artist(artist_match["artist_id"], sample_size=input.sample_size)
-                if tracks["sample"]:
-                    lines = "\n".join(
-                        f"  - {row['track_name']} (from {row['album_title']})"
-                        for row in tracks["sample"][: input.sample_size]
-                    )
-                    suggestion_blocks.append(
-                        f"Based on preference '{preference}' (matched artist: {artist_match['matched_name']}):\n{lines}"
+                tracks_result = search_tracks_by_artist(artist_match["artist_id"], sample_size=input.sample_size)
+                if tracks_result["sample"]:
+                    tracks = [
+                        {"track_name": row["track_name"], "album_title": row["album_title"]}
+                        for row in tracks_result["sample"][: input.sample_size]
+                    ]
+                    suggestions.append(
+                        {
+                            "preference": preference,
+                            "matched_genre": None,
+                            "matched_artist": artist_match["matched_name"],
+                            "tracks": tracks,
+                        }
                     )
                     used += 1
                     break
 
-    if not suggestion_blocks:
-        message = (
-            "Saved preferences were found, but none could be mapped to a known genre or artist in the catalog."
-        )
-        return Command(update={"messages": [ToolMessage(content=message, tool_call_id=tool_call_id)]})
+    if not suggestions:
+        payload = {
+            "status": "no_match",
+            "message": "Saved preferences were found, but none could be mapped to a known genre or artist in the catalog.",
+        }
+        return _tool_message(payload, tool_call_id)
 
-    summary = "Preference-based suggestions:\n" + "\n\n".join(suggestion_blocks)
-    return Command(update={"messages": [ToolMessage(content=summary, tool_call_id=tool_call_id)]})
+    payload = {"status": "ok", "suggestions": suggestions}
+    return _tool_message(payload, tool_call_id)

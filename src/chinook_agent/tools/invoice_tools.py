@@ -1,3 +1,4 @@
+import json
 import logging
 import os
 import sys
@@ -24,6 +25,7 @@ class CustomerLookupInput(BaseModel):
     phone: Optional[str] = Field(default=None, description="The customer's phone number to look up")
     customer_id: Optional[int] = Field(default=None, description="The customer's ID to look up")
 
+
 class InvoiceIdInput(BaseModel):
     invoice_id: int = Field(description="The invoice ID to retrieve details for")
 
@@ -31,6 +33,12 @@ class InvoiceIdInput(BaseModel):
 class NoInput(BaseModel):
     """For tools that need nothing beyond what's already in state."""
     pass
+
+
+def _tool_message(payload: dict, tool_call_id: str, **extra_updates) -> Command:
+    """Build a Command whose ToolMessage.content is a JSON string."""
+    return Command(update={"messages": [ToolMessage(content=json.dumps(payload), tool_call_id=tool_call_id)], **extra_updates})
+
 
 def _resolve_customer(email: Optional[str], phone: Optional[str], customer_id: Optional[int]):
     customer = None
@@ -50,37 +58,43 @@ def customer_lookup(
 ) -> Command:
     """Look up a customer and persist their customer_id into graph state for later tool calls."""
     if not input.email and not input.phone and not input.customer_id:
-        message = "Please provide either an email address, phone number, or customer ID to look up a customer."
-        return Command(update={"messages": [ToolMessage(content=message, tool_call_id=tool_call_id)]})
+        payload = {
+            "status": "error",
+            "message": "Please provide either an email address, phone number, or customer ID to look up a customer.",
+        }
+        return _tool_message(payload, tool_call_id)
 
     customer = _resolve_customer(input.email, input.phone, input.customer_id)
 
     if customer is None:
-        message = "No customer found with the information provided."
-        return Command(update={"messages": [ToolMessage(content=message, tool_call_id=tool_call_id)]})
+        payload = {"status": "not_found", "message": "No customer found with the information provided."}
+        return _tool_message(payload, tool_call_id)
 
-    summary = (
-        f"Customer ID: {customer.customer_id}\n"
-        f"Name: {customer.first_name} {customer.last_name}\n"
-        f"Email: {customer.email}\n"
-        f"Phone: {customer.phone}\n"
-        f"Company: {customer.company}\n"
-        f"City: {customer.city}\n"
-        f"Country: {customer.country}"
-    )
+    payload = {
+        "status": "ok",
+        "customer": {
+            "customer_id": customer.customer_id,
+            "first_name": customer.first_name,
+            "last_name": customer.last_name,
+            "email": customer.email,
+            "phone": customer.phone,
+            "company": customer.company,
+            "city": customer.city,
+            "country": customer.country,
+        },
+    }
 
     # This is the key part: update BOTH the message history AND customer_id in state
-    return Command(
-        update={
-            "customer_id": customer.customer_id,
-            "authenticated": True,
-            "customer_email": customer.email,
-            "messages": [ToolMessage(content=summary, tool_call_id=tool_call_id)],
-        }
+    return _tool_message(
+        payload,
+        tool_call_id,
+        customer_id=customer.customer_id,
+        authenticated=True,
+        customer_email=customer.email,
     )
 
 
-@tool("get_invoice_history", description="Retrieve a customer's invoice history by customer ID.")
+@tool("get_invoice_history", description="Retrieve a customer's invoice history. No arguments needed — uses the customer already identified in this conversation.")
 def get_invoice_history(
     input: NoInput,
     tool_call_id: Annotated[str, InjectedToolCallId],
@@ -89,23 +103,25 @@ def get_invoice_history(
     """Retrieve a customer's invoice history using their customer_id from state."""
     customer_id = state.get("customer_id")
     if not customer_id:
-        message = "Customer ID not found in state. Please look up the customer first."
-        return Command(update={"messages": [ToolMessage(content=message, tool_call_id=tool_call_id)]})
+        payload = {"status": "error", "message": "Customer ID not found in state. Please look up the customer first."}
+        return _tool_message(payload, tool_call_id)
 
     invoices = _get_invoices_for_customer(customer_id)
     if not invoices:
-        message = "No invoices found for this customer."
-        return Command(update={"messages": [ToolMessage(content=message, tool_call_id=tool_call_id)]})
+        payload = {"status": "not_found", "message": "No invoices found for this customer.", "invoices": []}
+        return _tool_message(payload, tool_call_id)
 
-    invoice_summary = "\n".join(
-        f"Invoice ID: {invoice['invoice_id']}, Date: {invoice['invoice_date']}, Total: ${invoice['total']:.2f}"
-        for invoice in invoices
-    )
+    payload = {
+        "status": "ok",
+        "invoices": [
+            {"invoice_id": invoice["invoice_id"], "date": invoice["invoice_date"], "total": invoice["total"]}
+            for invoice in invoices
+        ],
+    }
+    return _tool_message(payload, tool_call_id)
 
-    return Command(update={"messages": [ToolMessage(content=invoice_summary, tool_call_id=tool_call_id)]})
 
-
-@tool("get_tracks_for_invoices_for_customer", description="Retrieve track details across all of a customer's invoices.")
+@tool("get_tracks_for_invoices_for_customer", description="Retrieve track details across all of a customer's invoices. No arguments needed — uses the customer already identified in this conversation.")
 def get_tracks_for_invoices_for_customer(
     input: NoInput,
     tool_call_id: Annotated[str, InjectedToolCallId],
@@ -114,24 +130,32 @@ def get_tracks_for_invoices_for_customer(
     """Retrieve track details for all of a customer's invoices using their customer_id from state."""
     customer_id = state.get("customer_id")
     if not customer_id:
-        message = "Customer ID not found in state. Please look up the customer first."
-        return Command(update={"messages": [ToolMessage(content=message, tool_call_id=tool_call_id)]})
+        payload = {"status": "error", "message": "Customer ID not found in state. Please look up the customer first."}
+        return _tool_message(payload, tool_call_id)
 
     tracks = _get_tracks_for_invoices_for_customer(customer_id)
     if not tracks:
-        message = "No tracks found for this customer's invoices."
-        return Command(update={"messages": [ToolMessage(content=message, tool_call_id=tool_call_id)]})
+        payload = {"status": "not_found", "message": "No tracks found for this customer's invoices.", "tracks": []}
+        return _tool_message(payload, tool_call_id)
 
-    track_summary = "\n".join(
-        f"Track ID: {track['track_id']}, Name: {track['track_name']}, Composer: {track['composer']}, "
-        f"Duration (ms): {track['milliseconds']}, Size (bytes): {track['bytes']}, Price: ${track['unit_price']:.2f}"
-        for track in tracks
-    )
+    payload = {
+        "status": "ok",
+        "tracks": [
+            {
+                "track_id": track["track_id"],
+                "track_name": track["track_name"],
+                "composer": track["composer"],
+                "milliseconds": track["milliseconds"],
+                "bytes": track["bytes"],
+                "unit_price": track["unit_price"],
+            }
+            for track in tracks
+        ],
+    }
+    return _tool_message(payload, tool_call_id)
 
-    return Command(update={"messages": [ToolMessage(content=track_summary, tool_call_id=tool_call_id)]})
 
-
-@tool("get_support_rep_for_customer_by_invoiceId", description="Retrieve the support representative details for a specific customer and invoice ID.")
+@tool("get_support_rep_for_customer_by_invoiceId", description="Retrieve the support representative details for a specific invoice, for the customer already identified in this conversation.")
 def get_support_rep_for_customer_by_invoiceId(
     input: InvoiceIdInput,
     tool_call_id: Annotated[str, InjectedToolCallId],
@@ -140,30 +164,33 @@ def get_support_rep_for_customer_by_invoiceId(
     """Retrieve the support representative details for a specific customer and invoice ID using their customer_id from state."""
     customer_id = state.get("customer_id")
     if not customer_id:
-        message = "Customer ID not found in state. Please look up the customer first."
-        return Command(update={"messages": [ToolMessage(content=message, tool_call_id=tool_call_id)]})
+        payload = {"status": "error", "message": "Customer ID not found in state. Please look up the customer first."}
+        return _tool_message(payload, tool_call_id)
 
     invoice_id = input.invoice_id
     if not invoice_id:
-        message = "Invoice ID is required to retrieve the support representative details."
-        return Command(update={"messages": [ToolMessage(content=message, tool_call_id=tool_call_id)]})
+        payload = {"status": "error", "message": "Invoice ID is required to retrieve the support representative details."}
+        return _tool_message(payload, tool_call_id)
 
     support_rep = _get_support_rep_for_customer_by_invoiceId(customer_id, invoice_id)
     if not support_rep:
-        message = "No support representative found for this customer and invoice ID."
-        return Command(update={"messages": [ToolMessage(content=message, tool_call_id=tool_call_id)]})
+        payload = {"status": "not_found", "message": "No support representative found for this customer and invoice ID."}
+        return _tool_message(payload, tool_call_id)
 
-    support_rep_summary = (
-        f"Support Rep ID: {support_rep['employee_id']}\n"
-        f"Name: {support_rep['first_name']} {support_rep['last_name']}\n"
-        f"Title: {support_rep['title']}\n"
-        f"Email: {support_rep.get('email', 'N/A')}"
-    )
+    payload = {
+        "status": "ok",
+        "support_rep": {
+            "employee_id": support_rep["employee_id"],
+            "first_name": support_rep["first_name"],
+            "last_name": support_rep["last_name"],
+            "title": support_rep["title"],
+            "email": support_rep.get("email"),
+        },
+    }
+    return _tool_message(payload, tool_call_id)
 
-    return Command(update={"messages": [ToolMessage(content=support_rep_summary, tool_call_id=tool_call_id)]})
 
-
-@tool("get_tracks_for_invoice_for_customer", description="Retrieve track details for a specific invoice and customer.")
+@tool("get_tracks_for_invoice_for_customer", description="Retrieve track details for one specific invoice, for the customer already identified in this conversation.")
 def get_tracks_for_invoice_for_customer(
     input: InvoiceIdInput,
     tool_call_id: Annotated[str, InjectedToolCallId],
@@ -172,23 +199,32 @@ def get_tracks_for_invoice_for_customer(
     """Retrieve track details for a specific invoice and customer using their customer_id from state."""
     customer_id = state.get("customer_id")
     if not customer_id:
-        message = "Customer ID not found in state. Please look up the customer first."
-        return Command(update={"messages": [ToolMessage(content=message, tool_call_id=tool_call_id)]})
+        payload = {"status": "error", "message": "Customer ID not found in state. Please look up the customer first."}
+        return _tool_message(payload, tool_call_id)
 
     invoice_id = input.invoice_id
     if not invoice_id:
-        message = "Invoice ID is required to retrieve the track details."
-        return Command(update={"messages": [ToolMessage(content=message, tool_call_id=tool_call_id)]})
+        payload = {"status": "error", "message": "Invoice ID is required to retrieve the track details."}
+        return _tool_message(payload, tool_call_id)
 
     tracks = _get_tracks_for_invoice_for_customer(invoice_id, customer_id)
     if not tracks:
-        message = "No tracks found for this invoice and customer."
-        return Command(update={"messages": [ToolMessage(content=message, tool_call_id=tool_call_id)]})
+        payload = {"status": "not_found", "message": "No tracks found for this invoice and customer.", "tracks": []}
+        return _tool_message(payload, tool_call_id)
 
-    track_summary = "\n".join(
-        f"Track ID: {track['track_id']}, Name: {track['track_name']}, Composer: {track['composer']}, "
-        f"Duration (ms): {track['milliseconds']}, Size (bytes): {track['bytes']}, Price: ${track['unit_price']:.2f}"
-        for track in tracks
-    )
-
-    return Command(update={"messages": [ToolMessage(content=track_summary, tool_call_id=tool_call_id)]})
+    payload = {
+        "status": "ok",
+        "invoice_id": invoice_id,
+        "tracks": [
+            {
+                "track_id": track["track_id"],
+                "track_name": track["track_name"],
+                "composer": track["composer"],
+                "milliseconds": track["milliseconds"],
+                "bytes": track["bytes"],
+                "unit_price": track["unit_price"],
+            }
+            for track in tracks
+        ],
+    }
+    return _tool_message(payload, tool_call_id)

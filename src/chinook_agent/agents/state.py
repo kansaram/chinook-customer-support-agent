@@ -73,3 +73,4 @@ class AgentState(TypedDict):
     handoff_count: int
     response: Annotated[Optional[str], set_response]
     response_parts: Annotated[list[str], add_response_parts]
+    get_preferences_call_count: int

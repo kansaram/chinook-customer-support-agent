@@ -6,16 +6,40 @@ import sys
 from uuid import uuid4
 
 from chinook_agent.graph import build_graph
+from chinook_agent.database.health import health_check
+from chinook_agent.config.logging import get_logger
 
+logger = get_logger(__name__)
 compiled_graph = build_graph()
 
 
+from langgraph.errors import GraphRecursionError
+
+# Caps total graph steps per turn. The runaway loop we saw (memory_agent calling
+# get_preferences repeatedly) reached 14+ steps and was still going — this limit
+# stops ANY loop, in ANY agent/tool, current or future, without needing to patch
+# every individual tool. A legitimate multi-agent turn (handoff + tool calls)
+# typically takes well under 10 steps, so 20 gives real headroom without letting
+# a runaway loop burn more than a few seconds/cents before being cut off.
+GRAPH_RECURSION_LIMIT = 20
+
+
 def handle_message(user_message: str, history, thread_id: str):
-    config = {"configurable": {"thread_id": thread_id}}
-    result = compiled_graph.invoke(
-        {"messages": [{"role": "user", "content": user_message}]},
-        config=config,
-    )
+    config = {
+        "configurable": {"thread_id": thread_id},
+        "recursion_limit": GRAPH_RECURSION_LIMIT,
+    }
+    try:
+        result = compiled_graph.invoke(
+            {"messages": [{"role": "user", "content": user_message}]},
+            config=config,
+        )
+    except GraphRecursionError:
+        logger.error(f"Graph exceeded recursion limit ({GRAPH_RECURSION_LIMIT} steps) — likely a loop", exc_info=True)
+        return (
+            "Sorry, I got stuck trying to process that request. "
+            "Could you try rephrasing it, or asking one thing at a time?"
+        )
 
     parts = result.get("response_parts")
     if parts:
@@ -52,9 +76,6 @@ with gr.Blocks() as demo:
     gr.Markdown("# Chinook Customer Support Agent")
     gr.Markdown("Ask about invoices, tracks, artists, genres, and music preferences.")
 
-    # IMPORTANT: pass the function itself (no parentheses) so Gradio calls it once
-    # PER SESSION. Passing create_thread_id() would call it once at app startup and
-    # share that single thread_id across every visitor, mixing their conversations.
     session_thread_id = gr.State(create_thread_id)
 
     chatbot = gr.Chatbot(label="Support Chat")
@@ -81,7 +102,18 @@ with gr.Blocks() as demo:
     )
 
 if __name__ == "__main__":
-    server_name = os.getenv("GRADIO_SERVER_NAME", "0.0.0.0")
+    # Startup health check — fail fast with a clear message rather than launching
+    # and having every conversation break confusingly the moment a DB is touched.
+    print("Checking database connectivity...")
+    status = health_check()
+    if not status["healthy"]:
+        print("STARTUP FAILED — one or more databases are not reachable:")
+        print(f"  chinook.db: {status['chinook_db']}")
+        print(f"  customer_memory.db: {status['memory_db']}")
+        sys.exit(1)
+    print("Database health check passed.")
+
+    server_name = os.getenv("GRADIO_SERVER_NAME", "127.0.0.1")
     server_port = int(os.getenv("GRADIO_SERVER_PORT", "7860"))
     atexit.register(close_demo)
     signal.signal(signal.SIGINT, handle_shutdown)
