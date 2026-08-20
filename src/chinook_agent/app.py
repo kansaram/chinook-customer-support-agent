@@ -8,12 +8,11 @@ from uuid import uuid4
 from chinook_agent.graph import build_graph
 from chinook_agent.database.health import health_check
 from chinook_agent.config.logging import get_logger
+from langgraph.errors import GraphRecursionError
 
 logger = get_logger(__name__)
+
 compiled_graph = build_graph()
-
-
-from langgraph.errors import GraphRecursionError
 
 # Caps total graph steps per turn. The runaway loop we saw (memory_agent calling
 # get_preferences repeatedly) reached 14+ steps and was still going — this limit
@@ -36,10 +35,13 @@ def handle_message(user_message: str, history, thread_id: str):
         )
     except GraphRecursionError:
         logger.error(f"Graph exceeded recursion limit ({GRAPH_RECURSION_LIMIT} steps) — likely a loop", exc_info=True)
-        return (
-            "Sorry, I got stuck trying to process that request. "
-            "Could you try rephrasing it, or asking one thing at a time?"
-        )
+        # gr.Error() shows a distinct red toast, separate from the chat bubble —
+        # gives clear "error" status feedback instead of a plain reply that looks
+        # identical to a normal answer.
+        raise gr.Error("Sorry, I got stuck trying to process that request. Please try rephrasing it, or ask one thing at a time.")
+    except Exception:
+        logger.error("Unexpected error handling message", exc_info=True)
+        raise gr.Error("Something went wrong processing your request. Please try again.")
 
     parts = result.get("response_parts")
     if parts:
@@ -50,10 +52,13 @@ def handle_message(user_message: str, history, thread_id: str):
 
     messages = result.get("messages", [])
     if not messages:
-        return "I couldn't generate a response."
+        raise gr.Error("I couldn't generate a response. Please try again.")
 
     last_message = messages[-1]
-    return getattr(last_message, "content", "") or "I couldn't generate a response."
+    content = getattr(last_message, "content", "")
+    if not content:
+        raise gr.Error("I couldn't generate a response. Please try again.")
+    return content
 
 
 def create_thread_id() -> str:
@@ -83,6 +88,9 @@ with gr.Blocks() as demo:
     clear = gr.Button("Clear")
 
     def submit_message(user_message: str, history: list, thread_id: str):
+        # If handle_message raises gr.Error(), Gradio catches it automatically
+        # and shows a red error toast — the chat history is left unchanged for
+        # that turn (no broken/incomplete bot bubble gets added).
         reply = handle_message(user_message, history, thread_id)
         updated_history = (history or []) + [
             {"role": "user", "content": user_message},
@@ -104,14 +112,12 @@ with gr.Blocks() as demo:
 if __name__ == "__main__":
     # Startup health check — fail fast with a clear message rather than launching
     # and having every conversation break confusingly the moment a DB is touched.
-    print("Checking database connectivity...")
+    logger.info("Checking database connectivity...")
     status = health_check()
     if not status["healthy"]:
-        print("STARTUP FAILED — one or more databases are not reachable:")
-        print(f"  chinook.db: {status['chinook_db']}")
-        print(f"  customer_memory.db: {status['memory_db']}")
+        logger.error(f"STARTUP FAILED — chinook.db: {status['chinook_db']}, customer_memory.db: {status['memory_db']}")
         sys.exit(1)
-    print("Database health check passed.")
+    logger.info("Database health check passed.")
 
     server_name = os.getenv("GRADIO_SERVER_NAME", "127.0.0.1")
     server_port = int(os.getenv("GRADIO_SERVER_PORT", "7860"))
